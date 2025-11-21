@@ -16,6 +16,8 @@ from pathlib import Path
 from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from datetime import datetime
 from typing import Optional
+import uuid
+import os
 
 # Fix Windows console encoding for emojis
 if sys.platform == 'win32':
@@ -23,6 +25,51 @@ if sys.platform == 'win32':
         sys.stdout.reconfigure(encoding='utf-8')
     if hasattr(sys.stderr, 'reconfigure'):
         sys.stderr.reconfigure(encoding='utf-8')
+
+
+class SessionManager:
+    """Manages logging sessions with unique identifiers"""
+    
+    _current_session = None
+    _session_start_time = None
+    
+    @classmethod
+    def start_new_session(cls):
+        """Start a new logging session with timestamp"""
+        cls._session_start_time = datetime.now()
+        cls._current_session = cls._session_start_time.strftime('%Y%m%d_%H%M%S')
+        
+        # Create session info file
+        session_info = {
+            'session_id': cls._current_session,
+            'start_time': cls._session_start_time.isoformat(),
+            'assistant_version': '1.0.0',
+            'python_version': sys.version,
+            'platform': sys.platform
+        }
+        
+        # Save session info
+        session_file = Path('logs/sessions') / f'session_{cls._current_session}.json'
+        session_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        import json
+        with open(session_file, 'w') as f:
+            json.dump(session_info, f, indent=2)
+        
+        print(f"📅 New session started: {cls._current_session}")
+        return cls._current_session
+    
+    @classmethod
+    def get_current_session(cls):
+        """Get current session ID"""
+        if cls._current_session is None:
+            cls.start_new_session()
+        return cls._current_session
+    
+    @classmethod
+    def get_session_start_time(cls):
+        """Get session start time"""
+        return cls._session_start_time
 
 
 class LoggingConfig:
@@ -44,13 +91,15 @@ class LoggingConfig:
         'voice': BASE_LOG_DIR / 'voice',          # Voice recognition logs
         'multimodal': BASE_LOG_DIR / 'multimodal',  # Multimodal AI logs
         'system': BASE_LOG_DIR / 'system',        # System operations logs
+        'sessions': BASE_LOG_DIR / 'sessions',    # Session information
+        'activities': BASE_LOG_DIR / 'activities', # User activities per session
     }
     
     # Log format templates
     DETAILED_FORMAT = '%(asctime)s | %(name)s | %(levelname)-8s | [%(filename)s:%(lineno)d] | %(funcName)s | %(message)s'
     SIMPLE_FORMAT = '%(asctime)s | %(levelname)-8s | %(message)s'
     DEBUG_FORMAT = '%(asctime)s | %(name)s | %(levelname)-8s | [%(filename)s:%(lineno)d:%(funcName)s] | %(message)s'
-    API_FORMAT = '%(asctime)s | %(levelname)-8s | %(method)s %(endpoint)s | Status: %(status_code)s | %(duration)s ms | %(message)s'
+    API_FORMAT = '%(asctime)s | %(levelname)-8s | API | %(message)s'
     
     # Date format
     DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
@@ -180,48 +229,44 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
     
     @classmethod
-    def get_file_handler(cls, module_name: str, log_category: str, 
-                        use_time_rotation: bool = False) -> logging.Handler:
+    def get_session_file_handler(cls, module_name: str, log_category: str, 
+                               use_session_files: bool = True) -> logging.Handler:
         """
-        Create a rotating file handler for a specific module
+        Create a session-specific file handler
         
         Args:
-            module_name: Name of the module (e.g., 'core', 'multilingual')
-            log_category: Category of log (e.g., 'modules', 'backend')
-            use_time_rotation: Use time-based rotation instead of size
+            module_name: Name of the module
+            log_category: Category of log
+            use_session_files: Whether to use session-based naming
         """
         cls.initialize()
         
         log_dir = cls.LOG_DIRS.get(log_category, cls.LOG_DIRS['modules'])
-        log_file = log_dir / f"{module_name}.log"
         
-        if use_time_rotation:
-            # Rotate daily, keep 30 days
-            handler = TimedRotatingFileHandler(
-                log_file,
-                when='midnight',
-                interval=1,
-                backupCount=30,
-                encoding='utf-8'
-            )
+        if use_session_files:
+            session_id = SessionManager.get_current_session()
+            log_file = log_dir / f"{module_name}_{session_id}.log"
         else:
-            # Rotate by size
-            handler = RotatingFileHandler(
-                log_file,
-                maxBytes=cls.MAX_BYTES,
-                backupCount=cls.BACKUP_COUNT,
-                encoding='utf-8'
-            )
+            log_file = log_dir / f"{module_name}.log"
+        
+        # Use RotatingFileHandler for session files too
+        handler = RotatingFileHandler(
+            log_file,
+            maxBytes=cls.MAX_BYTES,
+            backupCount=cls.BACKUP_COUNT,
+            encoding='utf-8'
+        )
         
         handler.setLevel(cls.FILE_LEVEL)
         return handler
     
     @classmethod
-    def get_error_handler(cls, module_name: str) -> logging.Handler:
-        """Create error-only file handler"""
+    def get_session_error_handler(cls, module_name: str) -> logging.Handler:
+        """Create session-specific error-only file handler"""
         cls.initialize()
         
-        log_file = cls.LOG_DIRS['errors'] / f"{module_name}_errors.log"
+        session_id = SessionManager.get_current_session()
+        log_file = cls.LOG_DIRS['errors'] / f"{module_name}_errors_{session_id}.log"
         
         handler = RotatingFileHandler(
             log_file,
@@ -261,9 +306,10 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 def get_logger(name: str, log_category: str = 'modules', 
                format_type: str = 'detailed',
                include_console: bool = True,
-               include_error_file: bool = True) -> logging.Logger:
+               include_error_file: bool = True,
+               use_session_files: bool = True) -> logging.Logger:
     """
-    Get or create a configured logger
+    Get or create a configured logger with session support
     
     Args:
         name: Logger name (usually __name__)
@@ -271,25 +317,25 @@ def get_logger(name: str, log_category: str = 'modules',
         format_type: Format style ('detailed', 'simple', 'debug', 'api')
         include_console: Whether to log to console
         include_error_file: Whether to create separate error log file
+        use_session_files: Whether to use session-based file naming
     
     Returns:
         Configured logger instance
-    
-    Example:
-        # In a module file
-        from utils.logging_config import get_logger
-        logger = get_logger(__name__)
-        
-        logger.info("Application started")
-        logger.error("Something went wrong")
     """
     
+    # Create session-specific logger name
+    if use_session_files:
+        session_id = SessionManager.get_current_session()
+        logger_key = f"{name}_{session_id}"
+    else:
+        logger_key = name
+    
     # Return existing logger if already configured
-    if name in LoggingConfig._loggers:
-        return LoggingConfig._loggers[name]
+    if logger_key in LoggingConfig._loggers:
+        return LoggingConfig._loggers[logger_key]
     
     # Create new logger
-    logger = logging.getLogger(name)
+    logger = logging.getLogger(logger_key)
     logger.setLevel(LoggingConfig.DEFAULT_LEVEL)
     logger.propagate = False  # Don't propagate to root logger
     
@@ -302,14 +348,17 @@ def get_logger(name: str, log_category: str = 'modules',
     # Extract module name from full name (e.g., 'modules.core' -> 'core')
     module_name = name.split('.')[-1] if '.' in name else name
     
-    # Add file handler for main logs
-    file_handler = LoggingConfig.get_file_handler(module_name, log_category)
+    # Add session-aware file handler for main logs
+    file_handler = LoggingConfig.get_session_file_handler(module_name, log_category, use_session_files)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
     
-    # Add error-specific file handler
+    # Add session-aware error-specific file handler
     if include_error_file:
-        error_handler = LoggingConfig.get_error_handler(module_name)
+        if use_session_files:
+            error_handler = LoggingConfig.get_session_error_handler(module_name)
+        else:
+            error_handler = LoggingConfig.get_session_error_handler(module_name)  # Use session handler as fallback
         error_handler.setFormatter(formatter)
         logger.addHandler(error_handler)
     
@@ -320,7 +369,13 @@ def get_logger(name: str, log_category: str = 'modules',
         logger.addHandler(console_handler)
     
     # Cache the logger
-    LoggingConfig._loggers[name] = logger
+    LoggingConfig._loggers[logger_key] = logger
+    
+    # Log session start info for this module
+    if use_session_files:
+        session_start = SessionManager.get_session_start_time()
+        if session_start:
+            logger.info(f"📅 Session started at {session_start.strftime('%Y-%m-%d %H:%M:%S')} - Module: {module_name}")
     
     return logger
 

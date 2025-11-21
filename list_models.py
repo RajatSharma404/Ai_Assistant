@@ -5,6 +5,8 @@ Check available Gemini models
 """
 
 import os
+from dotenv import load_dotenv
+load_dotenv()
 import google.generativeai as genai
 
 api_key = os.environ.get("GEMINI_API_KEY")

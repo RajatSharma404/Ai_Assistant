@@ -27,7 +27,7 @@
 
 ```python
 # modules/multimodal.py - Line 23
-GOOGLE_API_KEY = "AIzaSyBqN0ooaSDpL8wOh9pv_X9nC7aVpXzZgHQ"  # ❌ HARDCODED
+GOOGLE_API_KEY = your key  # ❌ HARDCODED
 
 # modules/email.py
 EMAIL = "your_email@gmail.com"  # ❌ Placeholder

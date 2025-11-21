@@ -16,9 +16,27 @@ const ConversationSpace = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<'openai' | 'gemini'>('openai');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const quickReplies = ['Show my calendar', 'Check weather', 'Play music', 'System status'];
+  const quickReplies = [
+    '🌤️ Check weather',
+    '🎵 Play music', 
+    '💻 System status',
+    '📝 Take a note',
+    '🚀 Open Chrome',
+    '🔍 Search Google',
+    '⚙️ Show help'
+  ];
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 128) + 'px';
+    }
+  }, [inputText]);
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -38,13 +56,16 @@ const ConversationSpace = () => {
       setIsConnected(false);
     });
 
-    newSocket.on('command_response', (data: { response: string }) => {
+    newSocket.on('command_response', (data: { response?: string; error?: string; success?: boolean }) => {
+      const responseText = data.error || data.response || 'No response received';
+      const mood = data.error ? 'confused' : 'thoughtful';
+      
       const aiResponse: Message = {
         id: Date.now(),
-        text: data.response,
+        text: responseText,
         sender: 'ai',
         timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-        mood: 'thoughtful',
+        mood,
       };
       setMessages((prev) => [...prev, aiResponse]);
       setIsProcessing(false);
@@ -61,6 +82,75 @@ const ConversationSpace = () => {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const handleQuickReply = async (reply: string) => {
+    if (isProcessing) return;
+    
+    // Add user message immediately
+    const userMessage: Message = {
+      id: Date.now(),
+      text: reply,
+      sender: 'user',
+      timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+    };
+    
+    setMessages((prev) => [...prev, userMessage]);
+    setIsProcessing(true);
+
+    try {
+      // Send via WebSocket if connected
+      if (socket && isConnected) {
+        socket.emit('command', { message: reply, model: selectedModel });
+      } else {
+        // Fallback to REST API
+        const response = await fetch('/api/command', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ command: reply, model: selectedModel }),
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            const aiResponse: Message = {
+              id: Date.now() + 1,
+              text: data.response,
+              sender: 'ai',
+              timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+              mood: 'thoughtful',
+            };
+            setMessages((prev) => [...prev, aiResponse]);
+          } else {
+            throw new Error(data.error || 'Unknown error occurred');
+          }
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+        }
+        setIsProcessing(false);
+      }
+    } catch (error) {
+      console.error('Error sending quick reply:', error);
+      const errorResponse: Message = {
+        id: Date.now() + 1,
+        text: 'Sorry, I encountered an error processing your request. Please try again.',
+        sender: 'ai',
+        timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        mood: 'confused',
+      };
+      setMessages((prev) => [...prev, errorResponse]);
+      setIsProcessing(false);
+    }
+  };
 
   const handleSend = async () => {
     if (!inputText.trim() || isProcessing) return;
@@ -80,31 +170,34 @@ const ConversationSpace = () => {
     try {
       // Send via WebSocket if connected
       if (socket && isConnected) {
-        socket.emit('command', { command: commandText });
+        socket.emit('command', { message: commandText, model: selectedModel });
       } else {
         // Fallback to REST API
-        const token = localStorage.getItem('yourdaddy-token');
         const response = await fetch('/api/command', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify({ command: commandText }),
+          body: JSON.stringify({ command: commandText, model: selectedModel }),
         });
         
         if (response.ok) {
           const data = await response.json();
-          const aiResponse: Message = {
-            id: Date.now() + 1,
-            text: data.response,
-            sender: 'ai',
-            timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-            mood: 'thoughtful',
-          };
-          setMessages((prev) => [...prev, aiResponse]);
+          if (data.success) {
+            const aiResponse: Message = {
+              id: Date.now() + 1,
+              text: data.response,
+              sender: 'ai',
+              timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+              mood: 'thoughtful',
+            };
+            setMessages((prev) => [...prev, aiResponse]);
+          } else {
+            throw new Error(data.error || 'Unknown error occurred');
+          }
         } else {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
         }
         setIsProcessing(false);
       }
@@ -144,21 +237,40 @@ const ConversationSpace = () => {
                 </div>
               </div>
             </div>
-            <button className="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors" title="More options">
-              <MoreVertical size={20} />
-            </button>
+            <div className="flex items-center gap-2">
+              <select 
+                title="Select AI Model"
+                value={selectedModel} 
+                onChange={(e) => setSelectedModel(e.target.value as 'openai' | 'gemini')}
+                className="bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[#00CEC9] text-white cursor-pointer hover:bg-white/20 transition-colors"
+              >
+                <option value="openai" className="bg-[#1a1a1a] text-white">ChatGPT (OpenAI)</option>
+                <option value="gemini" className="bg-[#1a1a1a] text-white">Gemini (Google)</option>
+              </select>
+              <button className="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors" title="More options">
+                <MoreVertical size={20} />
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-6 space-y-4 scrollbar-custom">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center py-12">
                 <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#00CEC9] to-[#6C5CE7] flex items-center justify-center mb-4 text-3xl font-bold">
-                  YD
+                  🤖
                 </div>
                 <h3 className="text-xl font-semibold mb-2">Start a Conversation</h3>
-                <p className="text-[#DDDDDD] max-w-md">
-                  I'm here to help! Ask me anything or use the quick actions below to get started.
+                <p className="text-[#DDDDDD] max-w-md mb-4">
+                  I'm your intelligent AI assistant! I can help you with:
                 </p>
+                <div className="text-sm text-[#00B894] grid grid-cols-2 gap-2 max-w-md">
+                  <div>🌤️ Weather updates</div>
+                  <div>🚀 App management</div>
+                  <div>🎵 Music control</div>
+                  <div>💻 System monitoring</div>
+                  <div>📝 Note taking</div>
+                  <div>🔍 Web searches</div>
+                </div>
               </div>
             ) : (
               messages.map((message) => (
@@ -203,8 +315,9 @@ const ConversationSpace = () => {
               {quickReplies.map((reply, index) => (
                 <button
                   key={index}
-                  onClick={() => setInputText(reply)}
-                  className="px-4 py-2 rounded-xl glass hover:bg-white/10 transition-colors text-sm"
+                  onClick={() => handleQuickReply(reply)}
+                  disabled={isProcessing}
+                  className="px-4 py-2 rounded-xl glass hover:bg-white/10 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {reply}
                 </button>
@@ -218,14 +331,15 @@ const ConversationSpace = () => {
               <button className="w-10 h-10 rounded-xl hover:bg-white/10 flex items-center justify-center transition-colors" title="Add emoji">
                 <Smile size={20} className="text-[#DDDDDD]" />
               </button>
-              <input
-                type="text"
+              <textarea
+                ref={textareaRef}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && !isProcessing && handleSend()}
+                onKeyDown={handleKeyPress}
                 disabled={isProcessing}
-                placeholder={isProcessing ? "Processing..." : "Type your message..."}
-                className="flex-1 bg-white/5 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-[#00CEC9] transition-all disabled:opacity-50"
+                placeholder={isProcessing ? "Processing..." : "Type your message... (Enter to send, Shift+Enter for new line)"}
+                className="flex-1 bg-white/5 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-[#00CEC9] transition-all disabled:opacity-50 resize-none min-h-[48px] max-h-32"
+                rows={1}
               />
               <button
                 onClick={handleSend}
@@ -233,7 +347,11 @@ const ConversationSpace = () => {
                 className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#00CEC9] to-[#6C5CE7] flex items-center justify-center hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 title="Send message"
               >
-                <Send size={20} />
+                {isProcessing ? (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                ) : (
+                  <Send size={20} />
+                )}
               </button>
             </div>
           </div>

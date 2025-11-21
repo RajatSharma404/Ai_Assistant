@@ -25,4 +25,4 @@ from .email_handler import *
 from .music import *
 from .file_ops import *
 from .web_scraping import *
-from .document_ocr import *
+# from .document_ocr import *  # Temporarily disabled due to PyPDF2 import issues

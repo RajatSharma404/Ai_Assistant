@@ -1,0 +1,55 @@
+# Google Assistant Quality Voice System Requirements
+# These packages enable professional-grade voice capabilities
+
+# === TTS (Text-to-Speech) ===
+edge-tts>=0.30.0          # Microsoft Neural Voices (best quality)
+pyttsx3>=2.90             # Fallback TTS engine
+TTS>=0.22.0               # Coqui TTS for offline synthesis (optional but recommended)
+
+# === ASR (Speech Recognition) ===
+SpeechRecognition>=3.10.0 # Google Speech-to-Text API
+openai>=1.3.0             # OpenAI Whisper API (recommended for best accuracy)
+google-cloud-speech>=2.21.0  # Google Cloud Speech-to-Text (optional)
+
+# === Wake Word Detection ===
+pocketsphinx>=0.8         # PocketSphinx for local wake word detection
+pyaudio>=0.2.13           # Audio input/output (may need system dependencies)
+
+# === Audio Processing ===
+numpy>=1.24.0             # Numerical computing
+scipy>=1.10.0             # Signal processing
+librosa>=0.10.0           # Audio feature extraction (optional)
+
+# === Audio Playback ===
+playsound>=1.2.2          # Simple audio playback
+pygame>=2.2.0             # Alternative for audio/video playback (optional)
+
+# === Utilities ===
+python-dotenv>=1.0.0      # Environment variable loading
+requests>=2.31.0          # HTTP requests
+
+# === Async Support ===
+asyncio-contextmanager>=1.0.0
+
+# === Logging ===
+# (already in your utils/logging_config.py)
+
+# Installation instructions:
+# 1. Basic installation (minimum):
+#    pip install edge-tts SpeechRecognition openai pyttsx3 pyaudio
+#
+# 2. Full installation (recommended):
+#    pip install -r google_assistant_requirements.txt
+#
+# 3. For offline-only (without API keys):
+#    pip install edge-tts TTS pocketsphinx pyaudio SpeechRecognition
+#
+# Note on PyAudio:
+# Windows: pip install pipwin && pipwin install pyaudio
+# Linux: sudo apt-get install python3-pyaudio
+# Mac: brew install portaudio && pip install pyaudio
+#
+# Note on Coqui TTS (optional):
+# Requires ~1GB download for models, adds ~500ms latency
+# But enables completely offline, high-quality synthesis
+# Install with: pip install TTS

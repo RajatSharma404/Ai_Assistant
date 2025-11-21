@@ -259,11 +259,13 @@ try:
         BehavioralLearner,
         SkillAcquisitionManager,
         PredictiveActionEngine,
+        PersonalKnowledgeGraph
     )
     ENHANCED_LEARNING_AVAILABLE = True
+    print("✅ Enhanced learning features enabled")
 except ImportError as e:
-    print(f"⚠️ Enhanced learning features not available: {str(e)}")
-    print("Install scientific computing packages: pip install scikit-learn numpy scipy")
+    print(f"⚠️ Enhanced learning features temporarily disabled: {str(e)}")
+    print("Will be re-enabled after dependency resolution")
     ENHANCED_LEARNING_AVAILABLE = False
     # Create dummy classes
     class EnhancedLearningSystem:
@@ -273,6 +275,8 @@ except ImportError as e:
     class SkillAcquisitionManager:
         def __init__(self): pass
     class PredictiveActionEngine:
+        def __init__(self): pass
+    class PersonalKnowledgeGraph:
         def __init__(self): pass
 
 # Import advanced system integration functions

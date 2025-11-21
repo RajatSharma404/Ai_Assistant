@@ -30,10 +30,11 @@ logger = get_logger(__name__, log_category='modules')
 
 # Try to import translation libraries
 try:
-    from googletrans import Translator
+    from deep_translator import GoogleTranslator
     GOOGLE_TRANSLATE_AVAILABLE = True
 except ImportError:
     GOOGLE_TRANSLATE_AVAILABLE = False
+    print("⚠️ deep-translator not available. Install with: pip install deep-translator")
 
 try:
     import speech_recognition as sr
@@ -154,8 +155,8 @@ class MultilingualSupport:
         """Setup translation services."""
         try:
             if GOOGLE_TRANSLATE_AVAILABLE:
-                self.translator = Translator()
-                logging.info("✅ Google Translate initialized")
+                # deep-translator doesn't need initialization like googletrans
+                logging.info("✅ Google Translate (deep-translator) initialized")
             else:
                 logging.warning("⚠️ Google Translate not available")
         except Exception as e:
@@ -401,7 +402,7 @@ class MultilingualSupport:
                       source_language: Optional[Language] = None) -> str:
         """Translate text between languages."""
         try:
-            if not self.translator:
+            if not GOOGLE_TRANSLATE_AVAILABLE:
                 return f"❌ Translation service not available"
             
             # Check cache first
@@ -429,15 +430,16 @@ class MultilingualSupport:
             if target_code == "hinglish":
                 target_code = "hi"  # Translate to Hindi for Hinglish base
             
-            result = self.translator.translate(text, src=source_code, dest=target_code)
-            translated_text = result.text
+            # Use deep-translator
+            translator = GoogleTranslator(source=source_code if source_code != 'auto' else 'auto', target=target_code)
+            translated_text = translator.translate(text)
             
             # Post-process for Hinglish output
             if target_language == Language.HINGLISH:
                 translated_text = self._create_hinglish_output(translated_text, text)
             
             # Cache the translation
-            self._cache_translation(text, source_language, translated_text, target_language, result.confidence)
+            self._cache_translation(text, source_language, translated_text, target_language, 1.0)
             
             return translated_text
             
@@ -458,12 +460,14 @@ class MultilingualSupport:
                 
                 if is_hindi and target_language == Language.ENGLISH:
                     # Translate Hindi word to English
-                    result = self.translator.translate(word, src='hi', dest='en')
-                    translated_parts.append(result.text)
+                    translator = GoogleTranslator(source='hi', target='en')
+                    result = translator.translate(word)
+                    translated_parts.append(result)
                 elif not is_hindi and target_language == Language.HINDI:
                     # Translate English word to Hindi
-                    result = self.translator.translate(word, src='en', dest='hi')
-                    translated_parts.append(result.text)
+                    translator = GoogleTranslator(source='en', target='hi')
+                    result = translator.translate(word)
+                    translated_parts.append(result)
                 else:
                     # Keep the word as is
                     translated_parts.append(word)

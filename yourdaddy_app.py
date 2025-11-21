@@ -98,10 +98,27 @@ class YourDaddyAssistant:
         }
     
     def setup_logging(self):
-        """Setup logging system"""
-        from utils.logging_config import get_logger
+        """Setup logging system with new session"""
+        from utils.logging_config import get_logger, SessionManager
+        from utils.session_activity_logger import session_activity_logger
+        
+        # Start new session
+        session_id = SessionManager.start_new_session()
+        self.session_id = session_id
+        
+        # Initialize session-based logger
         self.logger = get_logger('yourdaddy_app', log_category='app')
-        self.logger.info("Logging system initialized")
+        self.activity_logger = session_activity_logger
+        
+        # Log application startup
+        self.logger.info(f"🚀 YourDaddy Assistant started - Session: {session_id}")
+        self.logger.info(f"Platform: {sys.platform} | Python: {sys.version}")
+        
+        # Log startup activity
+        self.activity_logger.log_user_interaction(
+            'application_startup',
+            details={'platform': sys.platform, 'session_id': session_id}
+        )
     
     def setup_memory(self):
         """Initialize memory system"""

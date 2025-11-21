@@ -4,6 +4,15 @@ Modern Flask backend to serve the React frontend and provide real-time APIs
 for YourDaddy Assistant's features.
 """
 
+# Initialize new session (must be first import)
+import utils.session_init
+from utils.session_activity_logger import (
+    log_api_request,
+    log_system_command,
+    log_user_interaction,
+    session_activity_logger
+)
+
 from flask import Flask, jsonify, request, send_from_directory
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
@@ -95,9 +104,29 @@ try:
     from modules.multilingual import MultilingualSupport, Language, LanguageContext
     MULTILINGUAL_AVAILABLE = True
     print("✅ Multilingual support loaded in web backend")
-except ImportError:
+except ImportError as e:
     MULTILINGUAL_AVAILABLE = False
-    print("⚠️ Multilingual support not available in web backend")
+    print("⚠️ Multilingual support not available in web backend - dependency issue with googletrans/httpx")
+except Exception as e:
+    MULTILINGUAL_AVAILABLE = False
+    print(f"⚠️ Multilingual support not available in web backend: {e}")
+
+# Import advanced chat system and LLM providers
+try:
+    from modules.advanced_chat_system import AdvancedChatSystem
+    ADVANCED_CHAT_AVAILABLE = True
+    print("✅ Advanced chat system loaded")
+except ImportError as e:
+    ADVANCED_CHAT_AVAILABLE = False
+    print(f"⚠️ Advanced chat system not available: {e}")
+
+try:
+    from modules.llm_provider import UnifiedChatInterface, LLMFactory
+    LLM_PROVIDER_AVAILABLE = True
+    print("✅ LLM providers loaded")
+except ImportError as e:
+    LLM_PROVIDER_AVAILABLE = False
+    print(f"⚠️ LLM providers not available: {e}")
 
 # System monitoring
 try:
@@ -224,6 +253,7 @@ class ModernAssistant:
         self.init_multimodal_ai()
         self.init_conversational_ai()
         self.init_multilingual()
+        self.init_smart_llm()  # Add smart network-aware LLM
         self.init_memory()
         self.init_voice_system()
         
@@ -262,6 +292,46 @@ class ModernAssistant:
         else:
             print("⚠️ Multilingual support not available")
             self.multilingual = None
+    
+    def init_smart_llm(self):
+        """Initialize smart network-aware LLM system"""
+        try:
+            from modules.network_aware_llm import get_optimal_llm_config
+            from modules.llm_provider import UnifiedChatInterface
+            
+            # Get optimal configuration based on network status
+            config = get_optimal_llm_config()
+            provider = config["provider"]
+            model = config["model"]
+            
+            print(f"🧠 Initializing LLM: {provider} ({model})")
+            print(f"📡 Network status: {'Online' if config['network_status'] else 'Offline'}")
+            
+            # Initialize the chat interface with smart config
+            self.llm_chat = UnifiedChatInterface(
+                provider=provider,
+                model=model,
+                use_fallback=True  # Enable automatic fallback
+            )
+            
+            # Store config for reference
+            self.current_llm_config = config
+            
+            # Test the connection
+            test_response = self.llm_chat.chat("Hello", stream=False)
+            if "Error" not in test_response:
+                print(f"✅ Smart LLM initialized successfully with {provider}")
+                if provider == "ollama":
+                    print(f"🏠 Using your local {model} model")
+                elif provider in ["openai", "gemini"]:
+                    print(f"🌐 Using online {provider} API")
+            else:
+                print(f"⚠️ LLM test failed: {test_response}")
+                
+        except Exception as e:
+            print(f"❌ Smart LLM initialization failed: {e}")
+            self.llm_chat = None
+            self.current_llm_config = None
     
     def init_multimodal_ai(self):
         """Initialize multimodal AI"""
@@ -516,12 +586,14 @@ class ModernAssistant:
             print(f"Network speed calculation error: {e}")
         
         return network_stats
+    
+    def process_command(self, command_text, model_preference=None):
         """Process user command with multilingual support"""
         log_query(command_text)
         try:
             # Process with multilingual support first
             if self.multilingual:
-                response = self.process_multilingual_command(command_text)
+                response = self.process_multilingual_command(command_text, model_preference)
                 log_reply(response)
                 return response
             
@@ -546,7 +618,7 @@ class ModernAssistant:
             print(f"Command processing error details:\n{error_details}")
             return f"Error processing command: {str(e)}"
     
-    def process_multilingual_command(self, command_text):
+    def process_multilingual_command(self, command_text, model_preference=None):
         """Process command with full multilingual support"""
         log_query(command_text)
         try:
@@ -771,7 +843,7 @@ Just speak naturally - I understand context! 🎉"""
         except Exception as e:
             return f"Screen analysis error: {str(e)}"
     
-    def process_enhanced_chat(self, message, context=None, image_data=None):
+    def process_enhanced_chat(self, message, context=None, image_data=None, model_preference=None):
         """Enhanced chat processing with full AI integration and all features"""
         features_used = []
         suggestions = []
@@ -826,25 +898,44 @@ Just speak naturally - I understand context! 🎉"""
                 except Exception as e:
                     print(f"Multilingual processing error: {e}")
             
-            # 4. CONVERSATIONAL AI PROCESSING
-            if self.conversational_ai and processed_message:
+            # 4. SMART LLM PROCESSING (Network-Aware)
+            if processed_message:
                 try:
-                    # Create or get conversation context
-                    if not hasattr(self, '_current_context_id') or not self._current_context_id:
-                        self._current_context_id = self.conversational_ai.create_context(
-                            "Enhanced Chat", "Multi-feature conversation", processed_message
-                        )
-                    context_id = self._current_context_id
-                    
-                    # Process with conversational AI
-                    ai_response = self.conversational_ai.process_message(processed_message)
-                    response_text += ai_response
-                    features_used.append("conversational_ai")
-                    
-                    # Get suggestions
-                    suggestions = self.conversational_ai.suggest_next_actions()
-                    if suggestions:
-                        features_used.append("ai_suggestions")
+                    # Use smart LLM system that auto-selects best provider
+                    if hasattr(self, 'llm_chat') and self.llm_chat:
+                        # Get current provider info
+                        provider_info = ""
+                        if hasattr(self, 'current_llm_config') and self.current_llm_config:
+                            provider = self.current_llm_config.get('provider', 'unknown')
+                            model = self.current_llm_config.get('model', 'unknown')
+                            network_status = "🌐 Online" if self.current_llm_config.get('network_status') else "🏠 Offline"
+                            provider_info = f" ({network_status} - {provider}:{model})"
+                        
+                        # Generate response using smart LLM
+                        ai_response = self.llm_chat.chat(processed_message, stream=False)
+                        response_text += ai_response
+                        features_used.append(f"smart_llm{provider_info}")
+                        
+                    # Fallback to conversational AI if smart LLM fails
+                    elif self.conversational_ai:
+                        # Create or get conversation context
+                        if not hasattr(self, '_current_context_id') or not self._current_context_id:
+                            self._current_context_id = self.conversational_ai.create_context(
+                                "Enhanced Chat", "Multi-feature conversation", processed_message
+                            )
+                        context_id = self._current_context_id
+                        
+                        # Process with conversational AI
+                        ai_response = self.conversational_ai.process_message(processed_message)
+                        response_text += ai_response
+                        features_used.append("conversational_ai_fallback")
+                        
+                        # Get suggestions
+                        suggestions = self.conversational_ai.suggest_next_actions()
+                        if suggestions:
+                            features_used.append("ai_suggestions")
+                    else:
+                        response_text += "❌ No AI system available for processing"
                         
                 except Exception as e:
                     response_text += f"❌ AI processing failed: {str(e)}\n\n"
@@ -1165,71 +1256,63 @@ except Exception as e:
     
     assistant = MinimalAssistant()
 
-# Serve HTML template
-@app.route('/', defaults={'path': ''})
+# Serve React Build (Bolt UI)
+@app.route('/')
+def index():
+    """Serve React app build"""
+    try:
+        print("Serving React app from project/dist")
+        return send_from_directory('project/dist', 'index.html')
+    except Exception as e:
+        print(f"React app serving error: {e}")
+        return f"<h1>React App Error</h1><p>Error: {e}</p><p>Please ensure the React app is built in project/dist/</p>"
+
+@app.route('/assets/<path:filename>')
+def serve_react_assets(filename):
+    """Serve React build assets"""
+    try:
+        return send_from_directory('project/dist/assets', filename)
+    except Exception as e:
+        print(f"Asset serving error: {e}")
+        return "Asset not found", 404
+
 @app.route('/<path:path>')
-def serve_web_app(path):
-    """Serve web application"""
+def serve_static_or_react(path):
+    """Serve static files or fallback to React app"""
+    # Handle old static files for backward compatibility
     if path.startswith('static/'):
-        # Serve static files
-        return send_from_directory('static', path[7:])
-    elif path and path != 'favicon.ico':
-        # Serve static files without static prefix
         try:
-            return send_from_directory('static', path)
+            return send_from_directory('static', path[7:])
         except:
             pass
     
-    # Serve main HTML template
-    from flask import render_template
+    # Handle common files
+    elif path in ['favicon.ico', 'robots.txt', 'vite.svg']:
+        try:
+            return send_from_directory('project/dist', path)
+        except:
+            try:
+                return send_from_directory('static', path)
+            except:
+                return "File not found", 404
+    
+    # For any other path, serve React app (SPA routing)
     try:
-        return render_template('index.html')
-    except:
-        # Fallback if template doesn't exist
-        return """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>YourDaddy Assistant</title>
-            <style>
-                body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-                .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
-                h1 { color: #333; text-align: center; }
-                .status { padding: 20px; background: #e8f5e8; border-radius: 5px; margin: 20px 0; }
-                .api-link { display: inline-block; margin: 10px; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; }
-                .api-link:hover { background: #0056b3; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>🤖 YourDaddy Assistant - Server Running!</h1>
-                <div class="status">
-                    <strong>✅ Status:</strong> Backend is operational<br>
-                    <strong>🌐 Server:</strong> Flask with SocketIO<br>
-                    <strong>🤖 AI Features:</strong> All features enabled and integrated<br>
-                    <strong>⚡ Automation:</strong> Voice, Apps, System Control
-                </div>
-                
-                <h2>🚀 Try Enhanced Chat</h2>
-                <div style="margin: 20px 0;">
-                    <a href="/enhanced-chat" class="api-link">💬 Enhanced Chat Interface</a>
-                    <a href="/api/features" class="api-link">🔧 Check Features</a>
-                    <a href="/test" class="api-link">🧪 Test Page</a>
-                </div>
-                
-                <p style="text-align: center; margin-top: 30px; color: #666;">
-                    All chat features enabled with full AI integration!
-                </p>
-            </div>
-        </body>
-        </html>
-        """
+        return send_from_directory('project/dist', 'index.html')
+    except Exception as e:
+        print(f"React app fallback error: {e}")
+        return f"<h1>App Error</h1><p>Could not serve React app: {e}</p>", 404
 
 @app.route('/enhanced-chat')
 def enhanced_chat():
     """Serve enhanced chat interface"""
     from flask import render_template
-    return render_template('enhanced_chat.html')
+    try:
+        print("Attempting to render enhanced_chat.html")
+        return render_template('enhanced_chat.html')
+    except Exception as e:
+        print(f"Enhanced chat template error: {e}")
+        return f"<h1>Enhanced Chat Template Error</h1><p>Error: {e}</p><p><a href='/'>Go back to main page</a></p>"
 
 @app.route('/test')
 def test_page():
@@ -1454,12 +1537,10 @@ def api_chat():
         return jsonify({"error": "Chat processing failed"}), 500
 
 @app.route('/api/command', methods=['POST'])
-@jwt_required(optional=True)  # Optional authentication - works without login too
 @limiter.limit("30 per minute")
 def api_command():
-    """Process text command - OPTIONALLY PROTECTED"""
+    """Process text command - NO AUTH REQUIRED"""
     try:
-        current_user = get_jwt_identity() or "anonymous"
         data = request.get_json()
         
         # Validate input
@@ -1472,17 +1553,162 @@ def api_command():
         if not command:
             return jsonify({"error": "No command provided"}), 400
         
-        response = assistant.process_command(command)
-        
-        return jsonify({
-            "command": command,
-            "response": response,
-            "user": current_user,
-            "timestamp": datetime.now().isoformat()
-        })
+        # Process command with proper error handling
+        try:
+            response = assistant.process_command(command)
+            
+            return jsonify({
+                "success": True,
+                "command": command,
+                "response": response,
+                "timestamp": datetime.now().isoformat()
+            })
+        except Exception as cmd_error:
+            return jsonify({
+                "success": False,
+                "error": f"Command processing failed: {str(cmd_error)}",
+                "command": command,
+                "timestamp": datetime.now().isoformat()
+            }), 500
+            
     except Exception as e:
-        logging.error(f"Command API error: {str(e)}")
-        return jsonify({"error": "Command processing failed"}), 500
+        api_logger.error(f"Command API error: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
+# Chat Streaming Session Management
+chat_sessions = {}
+chat_session_lock = threading.Lock()
+
+@app.route('/api/chat/stream', methods=['POST'])
+@jwt_required(optional=True)
+@limiter.limit("30 per minute")
+def api_chat_stream():
+    """
+    Stream chat response token-by-token via Server-Sent Events.
+    Provides real-time response generation with response count tracking.
+    """
+    try:
+        current_user = get_jwt_identity() or "anonymous"
+        data = request.get_json()
+        
+        # Validate input
+        is_valid, error = validate_input(data, 'message', 'command')
+        if not is_valid:
+            return jsonify({"error": error}), 400
+        
+        message = sanitize_command(data['message'])
+        session_id = data.get('session_id', f"{current_user}_{int(time.time())}")
+        
+        if not message:
+            return jsonify({"error": "No message provided"}), 400
+        
+        logger.info(f"🔄 Streaming chat for user: {current_user}, session: {session_id}")
+        
+        def generate_stream():
+            """Generate streaming response tokens"""
+            try:
+                # Get or create chat session
+                with chat_session_lock:
+                    if session_id not in chat_sessions:
+                        if LLM_PROVIDER_AVAILABLE:
+                            chat_sessions[session_id] = UnifiedChatInterface()
+                            chat_sessions[session_id].add_system_message(
+                                "You are a helpful AI assistant. Respond concisely and accurately."
+                            )
+                        else:
+                            # Fallback if LLM not available
+                            yield f"data: {json.dumps({'error': 'LLM provider not available'})}\n\n"
+                            return
+                    
+                    chat = chat_sessions[session_id]
+                
+                # Stream the response
+                start_time = time.time()
+                tokens = 0
+                full_response = ""
+                
+                logger.debug(f"Starting stream for message: {message[:50]}...")
+                
+                try:
+                    # Get streaming response
+                    for token in chat.chat(message, stream=True):
+                        tokens += 1
+                        full_response += token
+                        
+                        # Emit token with count
+                        token_data = json.dumps({
+                            'token': token,
+                            'count': tokens,
+                            'partial': full_response
+                        })
+                        yield f"data: {token_data}\n\n"
+                        
+                        # Small delay to prevent overwhelming client
+                        time.sleep(0.001)
+                except Exception as stream_error:
+                    logger.error(f"Streaming error: {stream_error}")
+                    error_data = json.dumps({'error': f'Streaming failed: {str(stream_error)}'})
+                    yield f"data: {error_data}\n\n"
+                    return
+                
+                # Send completion stats
+                duration = time.time() - start_time
+                completion_data = json.dumps({
+                    'done': True,
+                    'tokens': tokens,
+                    'duration': round(duration, 2),
+                    'tokens_per_second': round(tokens / duration, 2) if duration > 0 else 0,
+                    'full_response': full_response,
+                    'user': current_user,
+                    'timestamp': datetime.now().isoformat()
+                })
+                yield f"data: {completion_data}\n\n"
+                
+                logger.info(f"✅ Stream complete: {tokens} tokens in {duration:.2f}s ({tokens/duration:.1f} tok/s)")
+                
+            except Exception as e:
+                logger.error(f"Stream generation error: {e}")
+                error_msg = json.dumps({'error': str(e)})
+                yield f"data: {error_msg}\n\n"
+        
+        return Response(generate_stream(), mimetype='text/event-stream')
+    
+    except Exception as e:
+        logger.error(f"Chat stream endpoint error: {str(e)}")
+        return jsonify({"error": f"Chat streaming failed: {str(e)}"}), 500
+
+@app.route('/api/chat/sessions/<session_id>', methods=['GET'])
+@jwt_required(optional=True)
+def api_get_session(session_id):
+    """Get information about a chat session"""
+    try:
+        if session_id not in chat_sessions:
+            return jsonify({"error": "Session not found"}), 404
+        
+        chat = chat_sessions[session_id]
+        stats = {
+            "session_id": session_id,
+            "messages": len(chat.conversation_history),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        return jsonify(stats)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/chat/sessions/<session_id>', methods=['DELETE'])
+@jwt_required(optional=True)
+def api_delete_session(session_id):
+    """Delete a chat session"""
+    try:
+        with chat_session_lock:
+            if session_id in chat_sessions:
+                del chat_sessions[session_id]
+                return jsonify({"success": True, "message": "Session deleted"})
+        
+        return jsonify({"error": "Session not found"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/system/stats')
 @jwt_required()
@@ -2058,14 +2284,43 @@ def handle_disconnect():
 @socketio.on('command')
 def handle_command(data):
     """Handle real-time command"""
-    command = data.get('command', '')
-    
-    if command:
-        response = assistant.process_command(command)
+    try:
+        command = data.get('command', '')
+        message = data.get('message', command)  # Support both 'command' and 'message'
+        model = data.get('model')  # Get model preference
+        
+        if command or message:
+            # Use the actual command/message
+            user_input = command or message
+            
+            # Process command with proper error handling
+            response = assistant.process_command(user_input, model_preference=model)
+            
+            # Enhanced response format
+            emit('command_response', {
+                'command': user_input,
+                'response': response,
+                'timestamp': datetime.now().isoformat(),
+                'success': True,
+                'type': 'text'
+            })
+            
+            # Log the interaction
+            print(f"✅ Command processed: {user_input[:50]}...")
+            
+        else:
+            emit('command_response', {
+                'error': 'No command provided',
+                'timestamp': datetime.now().isoformat(),
+                'success': False
+            })
+            
+    except Exception as e:
+        print(f"❌ Command processing error: {str(e)}")
         emit('command_response', {
-            'command': command,
-            'response': response,
-            'timestamp': datetime.now().isoformat()
+            'error': f'Sorry, I encountered an error: {str(e)}',
+            'timestamp': datetime.now().isoformat(),
+            'success': False
         })
 
 # Enhanced Chat SocketIO Events
@@ -2076,9 +2331,10 @@ def handle_enhanced_chat(data):
         message = data.get('message', '')
         context = data.get('context', {})
         image_data = data.get('image', None)
+        model = data.get('model')  # Get model preference
         
         if message or image_data:
-            response = assistant.process_enhanced_chat(message, context, image_data)
+            response = assistant.process_enhanced_chat(message, context, image_data, model_preference=model)
             emit('enhanced_chat_response', {
                 'message': message,
                 'response': response['response'],
@@ -2094,6 +2350,76 @@ def handle_enhanced_chat(data):
             emit('enhanced_chat_error', {'error': 'No message or image provided'})
     except Exception as e:
         emit('enhanced_chat_error', {'error': f'Chat processing failed: {str(e)}'})
+
+@socketio.on('chat_stream')
+def handle_chat_stream(data):
+    """
+    Handle real-time streaming chat via WebSocket.
+    Streams response tokens as they are generated.
+    """
+    try:
+        message = data.get('message', '')
+        session_id = data.get('session_id', request.sid)
+        
+        if not message:
+            emit('chat_stream_error', {'error': 'No message provided'})
+            return
+        
+        logger.info(f"📡 WebSocket chat stream started: {session_id}")
+        
+        # Get or create chat session
+        with chat_session_lock:
+            if session_id not in chat_sessions:
+                if LLM_PROVIDER_AVAILABLE:
+                    chat_sessions[session_id] = UnifiedChatInterface()
+                    chat_sessions[session_id].add_system_message(
+                        "You are a helpful AI assistant. Respond concisely and accurately."
+                    )
+                else:
+                    emit('chat_stream_error', {'error': 'LLM provider not available'})
+                    return
+            
+            chat = chat_sessions[session_id]
+        
+        # Stream the response
+        start_time = time.time()
+        tokens = 0
+        full_response = ""
+        
+        try:
+            # Stream tokens
+            for token in chat.chat(message, stream=True):
+                tokens += 1
+                full_response += token
+                
+                # Emit token to client
+                emit('chat_token', {
+                    'token': token,
+                    'count': tokens,
+                    'partial': full_response
+                }, skip_sid=False)  # Send to current client
+        
+        except Exception as stream_error:
+            logger.error(f"WebSocket streaming error: {stream_error}")
+            emit('chat_stream_error', {'error': f'Streaming failed: {str(stream_error)}'})
+            return
+        
+        # Send completion signal with stats
+        duration = time.time() - start_time
+        emit('chat_complete', {
+            'tokens': tokens,
+            'duration': round(duration, 2),
+            'tokens_per_second': round(tokens / duration, 2) if duration > 0 else 0,
+            'full_response': full_response,
+            'session_id': session_id,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+        logger.info(f"✅ WebSocket stream complete: {tokens} tokens in {duration:.2f}s")
+        
+    except Exception as e:
+        logger.error(f"WebSocket chat stream error: {e}")
+        emit('chat_stream_error', {'error': f'Chat stream failed: {str(e)}'})
 
 @socketio.on('analyze_image')
 def handle_analyze_image(data):
@@ -2417,9 +2743,12 @@ def api_log_error():
         # Save to proper error log file in logs directory
         log_file = Path('logs/errors/frontend_errors.json')
         try:
-            if log_file.exists():
-                with open(log_file, 'r') as f:
-                    logs = json.load(f)
+            if log_file.exists() and log_file.stat().st_size > 0:
+                try:
+                    with open(log_file, 'r') as f:
+                        logs = json.load(f)
+                except json.JSONDecodeError:
+                    logs = []
             else:
                 logs = []
             

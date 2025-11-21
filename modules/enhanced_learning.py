@@ -15,12 +15,26 @@ import pickle
 import os
 from dataclasses import dataclass
 import networkx as nx
-import matplotlib.pyplot as plt
-from sklearn.cluster import KMeans
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 
-ADVANCED_FEATURES_AVAILABLE = True
+# Optional scientific libraries
+try:
+    import matplotlib.pyplot as plt
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    print("⚠️ Matplotlib not available - visualization features disabled")
+    MATPLOTLIB_AVAILABLE = False
+    plt = None
+
+try:
+    from sklearn.cluster import KMeans
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
+    SKLEARN_AVAILABLE = True
+except ImportError:
+    print("⚠️ Scikit-learn not available - ML features limited")
+    SKLEARN_AVAILABLE = False
+
+ADVANCED_FEATURES_AVAILABLE = MATPLOTLIB_AVAILABLE and SKLEARN_AVAILABLE
 
 @dataclass
 class Skill:
@@ -60,12 +74,15 @@ class EnhancedLearningSystem:
     
     def __init__(self, db_path: str = "enhanced_learning.db"):
         self.db_path = db_path
+        
+        # Initialize database first
+        self.init_database()
+        
+        # Then initialize components
         self.behavioral_learner = BehavioralLearner(db_path)
         self.skill_manager = SkillAcquisitionManager(db_path)
         self.predictor = PredictiveActionEngine(db_path)
         self.knowledge_graph = PersonalKnowledgeGraph(db_path)
-        
-        self.init_database()
     
     def init_database(self):
         """Initialize the learning database"""
@@ -376,7 +393,10 @@ class PredictiveActionEngine:
     
     def __init__(self, db_path: str):
         self.db_path = db_path
-        self.context_vectorizer = TfidfVectorizer(max_features=100)
+        if SKLEARN_AVAILABLE:
+            self.context_vectorizer = TfidfVectorizer(max_features=100)
+        else:
+            self.context_vectorizer = None
         self.prediction_model = None
     
     def predict_actions(self, current_context: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -465,18 +485,29 @@ class PersonalKnowledgeGraph:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Load nodes
-        cursor.execute("SELECT node_id, content, node_type, importance_score FROM knowledge_nodes")
-        for node_id, content, node_type, importance in cursor.fetchall():
-            self.graph.add_node(node_id, content=content, type=node_type, importance=importance)
-        
-        # Load edges
-        cursor.execute("SELECT source_node, target_node, relationship_type, strength FROM knowledge_edges")
-        for source, target, rel_type, strength in cursor.fetchall():
-            if self.graph.has_node(source) and self.graph.has_node(target):
-                self.graph.add_edge(source, target, relationship=rel_type, weight=strength)
-        
-        conn.close()
+        try:
+            # Check if tables exist
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_nodes'")
+            if not cursor.fetchone():
+                conn.close()
+                return  # Tables don't exist yet, skip loading
+            
+            # Load nodes
+            cursor.execute("SELECT node_id, content, node_type, importance_score FROM knowledge_nodes")
+            for node_id, content, node_type, importance in cursor.fetchall():
+                self.graph.add_node(node_id, content=content, type=node_type, importance=importance)
+            
+            # Load edges
+            cursor.execute("SELECT source_node, target_node, relationship_type, strength FROM knowledge_edges")
+            for source, target, rel_type, strength in cursor.fetchall():
+                if self.graph.has_node(source) and self.graph.has_node(target):
+                    self.graph.add_edge(source, target, relationship=rel_type, weight=strength)
+                    
+        except sqlite3.OperationalError as e:
+            # Handle case where tables don't exist yet
+            print(f"⚠️ Knowledge graph tables not found: {e}")
+        finally:
+            conn.close()
     
     def add_knowledge_node(self, content: str, node_type: str, metadata: Dict[str, Any] = None) -> str:
         """Add a new knowledge node"""
@@ -599,6 +630,10 @@ class PersonalKnowledgeGraph:
     
     def visualize_graph(self, output_path: str = "knowledge_graph.png"):
         """Create a visualization of the knowledge graph"""
+        if not MATPLOTLIB_AVAILABLE:
+            print("⚠️ Graph visualization not available - matplotlib required")
+            return False
+            
         if self.graph.number_of_nodes() == 0:
             return False
         
