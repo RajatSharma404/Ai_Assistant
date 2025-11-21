@@ -34,7 +34,7 @@ Provides multimodal AI capabilities using Google Gemini:
 **Severity:** CRITICAL SECURITY
 
 ```python
-GOOGLE_API_KEY = "AIzaSyBqN0ooaSDpL8wOh9pv_X9nC7aVpXzZgHQ"  # ❌ HARDCODED
+GOOGLE_API_KEY = your key   # ❌ HARDCODED
 ```
 
 **Already documented in Critical Issues & Security Reports**
