@@ -65,6 +65,9 @@ class DependencyAnalyzer:
             'win32gui': 'pywin32',
             'win32api': 'pywin32',
             'win32con': 'pywin32',
+            'win32com': 'pywin32',
+            'win32file': 'pywin32',
+            'win32process': 'pywin32',
             'pywintypes': 'pywin32',
             'selenium': 'selenium',
             'beautifulsoup4': 'beautifulsoup4',
@@ -204,7 +207,11 @@ class DependencyAnalyzer:
             'multiprocessing', 'signal', 'platform', 'ctypes', 'array',
             'sqlite3', 'csv', 'configparser', 'argparse', 'getopt', 'readline',
             'http', 'urllib', 'email', 'mimetypes', 'ftplib', 'imaplib',
-            'poplib', 'smtplib', 'telnetlib', 'xmlrpc', 'html', 'xml'
+            'poplib', 'smtplib', 'telnetlib', 'xmlrpc', 'html', 'xml',
+            # Additional built-in modules
+            'ast', 'unittest', 'cProfile', 'pstats', 'dataclasses', 'fnmatch',
+            'shlex', 'tarfile', 'zipfile', 'wave', 'webbrowser', 'winreg',
+            'tkinter', 'line_profiler', 'memory_profiler', 'inotify'
         }
         
         # Remove built-in modules and local modules

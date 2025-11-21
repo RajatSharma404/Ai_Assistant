@@ -19,18 +19,18 @@ class NetworkAwareLLMConfig:
         self.network_status = None
         self.check_interval = timedelta(minutes=5)  # Check every 5 minutes
         
-        # Priority configuration
-        self.online_providers = [
-            ("openai", "gpt-4", os.getenv("OPENAI_API_KEY")),
-            ("openai", "gpt-3.5-turbo", os.getenv("OPENAI_API_KEY")), 
-            ("gemini", "gemini-pro", os.getenv("GEMINI_API_KEY")),
-            ("gemini", "gemini-2.5-pro", os.getenv("GEMINI_API_KEY"))
+        # Priority configuration - Your powerful local models first!
+        self.local_providers = [
+            ("ollama", "gemma3:27b", True),  # Your 27B model - PRIORITY
+            ("ollama", "gpt-oss:20b", True)  # Your 20B model - PRIORITY  
         ]
         
-        # Your powerful local models as fallback
-        self.local_providers = [
-            ("ollama", "gemma3:27b", True),  # Your 27B model
-            ("ollama", "gpt-oss:20b", True)  # Your 20B model
+        self.online_providers = [
+            ("openai", "gpt-4o", os.getenv("OPENAI_API_KEY")),
+            ("openai", "gpt-4", os.getenv("OPENAI_API_KEY")), 
+            ("openai", "gpt-3.5-turbo", os.getenv("OPENAI_API_KEY")), 
+            ("gemini", "gemini-1.5-pro", os.getenv("GEMINI_API_KEY")),
+            ("gemini", "gemini-1.5-flash", os.getenv("GEMINI_API_KEY"))
         ]
     
     def check_internet_connectivity(self) -> bool:
@@ -77,15 +77,22 @@ class NetworkAwareLLMConfig:
     def get_optimal_provider(self) -> Tuple[str, str]:
         """
         Get the optimal provider based on network status and availability.
+        Prioritizes your powerful local models when they're available!
         
         Returns:
             Tuple of (provider_name, model_name)
         """
-        # Check network connectivity
+        # First, always check if your powerful local models are available
+        for provider, model, available in self.local_providers:
+            if available and self._test_ollama_model(model):
+                logger.info(f"🏠 Using your powerful local model: {model}")
+                return (provider, model)
+        
+        # Check network connectivity for online fallback
         is_online = self.check_internet_connectivity()
         
         if is_online:
-            # Try online providers in priority order
+            # Try online providers as backup
             for provider, model, api_key in self.online_providers:
                 if api_key:  # Only use if API key is available
                     try:
@@ -97,14 +104,9 @@ class NetworkAwareLLMConfig:
                         logger.warning(f"Provider {provider} test failed: {e}")
                         continue
             
-            logger.warning("Online providers failed, falling back to local models")
-        
-        # Use local models (offline or online fallback)
-        for provider, model, available in self.local_providers:
-            if available:
-                if self._test_ollama_model(model):
-                    logger.info(f"🏠 Using local model: {model}")
-                    return (provider, model)
+            logger.warning("Online providers failed, no local models available")
+        else:
+            logger.info("No internet connection and no local models available")
         
         # Final fallback
         logger.error("No providers available, using basic offline mode")
