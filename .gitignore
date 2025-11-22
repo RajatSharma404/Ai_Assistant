@@ -35,11 +35,22 @@ venv.bak/
 .env
 *.env
 !.env.example
+!backend.env.example
+!app_integration.env.example
 credentials.json
 token.pickle
 *.pem
 *.key
 *.cert
+
+# App Integration Security
+config/secure/
+config/app_integration.env
+config/*_credentials.json
+*_credentials.json
+*.credentials
+api_keys/
+secrets/
 
 # Database Files
 *.db

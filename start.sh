@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "================================================================"
-echo "   YourDaddy Assistant - Unified Launcher (Linux/macOS)"
+echo "   AI Assistant - Unified Launcher (Linux/macOS)"
 echo "================================================================"
 
 # Check if Python is installed

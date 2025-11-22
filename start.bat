@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 echo ================================================================
-echo    YourDaddy Assistant - Unified Launcher (Windows)
+echo    AI Assistant - Unified Launcher (Windows)
 echo ================================================================
 
 REM Check if Python is installed
@@ -70,36 +70,19 @@ echo 🚀 Launching: %TARGET%
 echo ================================================================
 
 if "%TARGET%"=="app" (
-    if exist "yourdaddy_app.py" (
-        python yourdaddy_app.py
-    ) else if exist "launch_assistant.py" (
-        python launch_assistant.py
-    ) else (
-        echo ❌ Main application not found
-        pause
-        exit /b 1
-    )
+    python main.py --interface desktop
 ) else if "%TARGET%"=="backend" (
-    if exist "backend.py" (
-        python backend.py
-    ) else (
-        echo ❌ Backend server not found
-        pause
-        exit /b 1
-    )
+    python main.py --interface web --port 5000
 ) else if "%TARGET%"=="web" (
-    echo Starting backend server in separate window...
-    start "Backend Server" cmd /k "cd /d %~dp0 && python backend.py"
-    
-    echo Waiting for backend to initialize...
-    timeout /t 5 /nobreak >nul
+    echo Starting web interface...
+    python main.py --interface web --port 5000
     
     if exist "project\package.json" (
         echo Starting frontend server in separate window...
         start "Frontend Server" cmd /k "cd /d %~dp0\project && npm run dev"
         echo.
         echo ================================================================
-        echo Both servers are starting in separate windows:
+        echo Both servers are starting:
         echo   - Backend:  http://localhost:5000
         echo   - Frontend: http://localhost:5173
         echo ================================================================
@@ -107,27 +90,11 @@ if "%TARGET%"=="app" (
         echo Frontend project not found. Backend only running at http://localhost:5000
     )
 ) else if "%TARGET%"=="test" (
-    if exist "test_chat.py" (
-        python test_chat.py
-    ) else (
-        echo ❌ Test suite not found
-        pause
-        exit /b 1
-    )
+    python -m pytest tests/ -v
 ) else if "%TARGET%"=="setup" (
-    if exist "setup.py" (
-        python setup.py
-    ) else (
-        echo ❌ Setup script not found
-        pause
-        exit /b 1
-    )
+    python scripts/setup/setup.py
 ) else if "%TARGET%"=="debug" (
-    if exist "debug.py" (
-        python debug.py
-    ) else (
-        echo ❌ Debug script not found
-        pause
+    python main.py --verbose --interface cli
         exit /b 1
     )
 ) else (

@@ -4,6 +4,22 @@
 # Install with: pip install -r requirements.txt
 
 # =========================================
+# WEB FRAMEWORK & API
+# =========================================
+flask==3.0.3
+flask-cors==5.0.0
+flask-restful==0.3.10
+werkzeug==3.0.6
+
+# =========================================
+# SECURITY & ENCRYPTION
+# =========================================
+cryptography==45.0.0
+PyJWT==2.10.1
+secrets-manager==1.0.0
+keyring==25.5.0
+
+# =========================================
 # CORE AI/ML FRAMEWORK
 # =========================================
 autogen-agentchat==0.7.5
