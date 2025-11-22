@@ -1,7 +1,11 @@
 #!/bin/bash
 
 echo "================================================================"
-echo "   AI Assistant - Unified Launcher (Linux/macOS)"
+echo "   YourDaddy AI Assistant - Secure Launcher (Linux/macOS)"
+echo "================================================================"
+echo "🔐 This launcher includes PIN authentication for security"
+echo "💡 Use --skip-auth to bypass PIN for development"
+echo "⚙️  Use --setup-pin to configure/change your PIN"
 echo "================================================================"
 
 # Check if Python is installed
@@ -41,9 +45,10 @@ show_menu() {
     echo "  3. web          - Start web UI (backend + frontend)"
     echo "  4. test         - Run comprehensive tests"
     echo "  5. setup        - Run setup and configuration"
-    echo "  6. debug        - Start in debug mode"
+    echo "  6. setup-pin    - Setup or change PIN authentication"
+    echo "  7. debug        - Start in debug mode"
     echo ""
-    read -p "Select option (1-6): " choice
+    read -p "Select option (1-7): " choice
     
     case $choice in
         1) TARGET="app" ;;
@@ -51,7 +56,8 @@ show_menu() {
         3) TARGET="web" ;;
         4) TARGET="test" ;;
         5) TARGET="setup" ;;
-        6) TARGET="debug" ;;
+        6) TARGET="setup-pin" ;;
+        7) TARGET="debug" ;;
         *) echo "Invalid choice. Exiting..."; exit 1 ;;
     esac
 }
@@ -66,26 +72,16 @@ echo "================================================================"
 
 case $TARGET in
     "app")
-        if [ -f "yourdaddy_app.py" ]; then
-            $PYTHON_CMD yourdaddy_app.py
-        elif [ -f "launch_assistant.py" ]; then
-            $PYTHON_CMD launch_assistant.py
-        else
-            echo "❌ Main application not found"
-            exit 1
-        fi
+        echo "🔐 Starting YourDaddy Assistant (Desktop Mode)..."
+        $PYTHON_CMD main.py --interface desktop
         ;;
     "backend")
-        if [ -f "backend.py" ]; then
-            $PYTHON_CMD backend.py
-        else
-            echo "❌ Backend server not found"
-            exit 1
-        fi
+        echo "🔐 Starting YourDaddy Assistant (Backend Only)..."
+        $PYTHON_CMD main.py --interface web --port 5000
         ;;
     "web")
-        echo "Starting backend server in background..."
-        $PYTHON_CMD backend.py &
+        echo "🔐 Starting YourDaddy Assistant (Web Interface)..."
+        $PYTHON_CMD main.py --interface web --port 5000 &
         BACKEND_PID=$!
         
         echo "Waiting for backend to initialize..."
@@ -117,36 +113,34 @@ case $TARGET in
         fi
         ;;
     "test")
-        if [ -f "test_chat.py" ]; then
-            $PYTHON_CMD test_chat.py
-        else
-            echo "❌ Test suite not found"
-            exit 1
-        fi
+        echo "🧪 Running tests..."
+        $PYTHON_CMD -m pytest tests/ -v
         ;;
     "setup")
-        if [ -f "setup.py" ]; then
-            $PYTHON_CMD setup.py
+        echo "⚙️ Running setup..."
+        if [ -f "scripts/setup/setup.py" ]; then
+            $PYTHON_CMD scripts/setup/setup.py
         else
             echo "❌ Setup script not found"
             exit 1
         fi
         ;;
+    "setup-pin")
+        echo "🔐 PIN Management..."
+        $PYTHON_CMD setup_pin.py
+        ;;
     "debug")
-        if [ -f "debug.py" ]; then
-            $PYTHON_CMD debug.py
-        else
-            echo "❌ Debug script not found"
-            exit 1
-        fi
+        echo "🐛 Starting in debug mode (authentication disabled)..."
+        $PYTHON_CMD main.py --verbose --interface cli --skip-auth
         ;;
     *)
         echo "❌ Unknown target: $TARGET"
         echo ""
-        echo "Usage: $0 [app|backend|web|test|setup|debug] [mode]"
+        echo "Usage: $0 [app|backend|web|test|setup|setup-pin|debug] [mode]"
         echo "Example: $0 app"
-        echo "         $0 backend enhanced"
+        echo "         $0 backend"
         echo "         $0 web"
+        echo "         $0 setup-pin"
         exit 1
         ;;
 esac

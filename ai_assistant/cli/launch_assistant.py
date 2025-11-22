@@ -312,6 +312,31 @@ def main():
     print("🤖 YourDaddy Assistant v3.1 - Professional AI Assistant")
     print("=" * 60)
     
+    # PIN Authentication
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('--skip-auth', action='store_true', help='Skip PIN authentication')
+    args, unknown = parser.parse_known_args()
+    
+    if not args.skip_auth:
+        print("🔐 PIN Authentication Required")
+        print("-" * 30)
+        try:
+            import sys
+            sys.path.insert(0, '../../')  # Add root directory to path
+            from ai_assistant.auth import authenticate
+            if not authenticate():
+                print("❌ Authentication failed. Exiting...")
+                return False
+            print("✅ Authentication successful!\n")
+        except ImportError as e:
+            logger.error(f"Error importing PIN authentication: {e}")
+            print("❌ Authentication module not available. Please run from main.py or setup authentication.")
+            return False
+        except Exception as e:
+            logger.error(f"Authentication error: {e}")
+            return False
+    
     # System check
     checker = SystemChecker()
     if not checker.run_full_check():

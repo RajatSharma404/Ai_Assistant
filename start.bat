@@ -2,7 +2,11 @@
 setlocal enabledelayedexpansion
 
 echo ================================================================
-echo    AI Assistant - Unified Launcher (Windows)
+echo    YourDaddy AI Assistant - Secure Launcher (Windows)
+echo ================================================================
+echo 🔐 This launcher includes PIN authentication for security
+echo 💡 Use --skip-auth to bypass PIN for development
+echo ⚙️  Use --setup-pin to configure/change your PIN
 echo ================================================================
 
 REM Check if Python is installed
@@ -47,16 +51,18 @@ echo   2. backend      - Start unified backend server only
 echo   3. web          - Start web UI (backend + frontend)
 echo   4. test         - Run comprehensive tests
 echo   5. setup        - Run setup and configuration
-echo   6. debug        - Start in debug mode
+echo   6. setup-pin    - Setup or change PIN authentication
+echo   7. debug        - Start in debug mode
 echo.
-set /p choice="Select option (1-6): "
+set /p choice="Select option (1-7): "
 
 if "%choice%"=="1" set "TARGET=app"
 if "%choice%"=="2" set "TARGET=backend"
 if "%choice%"=="3" set "TARGET=web"
 if "%choice%"=="4" set "TARGET=test"
 if "%choice%"=="5" set "TARGET=setup"
-if "%choice%"=="6" set "TARGET=debug"
+if "%choice%"=="6" set "TARGET=setup-pin"
+if "%choice%"=="7" set "TARGET=debug"
 
 if "%TARGET%"=="" (
     echo Invalid choice. Exiting...
@@ -70,11 +76,13 @@ echo 🚀 Launching: %TARGET%
 echo ================================================================
 
 if "%TARGET%"=="app" (
+    echo 🔐 Starting YourDaddy Assistant (Desktop Mode)...
     python main.py --interface desktop
 ) else if "%TARGET%"=="backend" (
+    echo 🔐 Starting YourDaddy Assistant (Backend Only)...
     python main.py --interface web --port 5000
 ) else if "%TARGET%"=="web" (
-    echo Starting web interface...
+    echo 🔐 Starting YourDaddy Assistant (Web Interface)...
     python main.py --interface web --port 5000
     
     if exist "project\package.json" (
@@ -90,13 +98,17 @@ if "%TARGET%"=="app" (
         echo Frontend project not found. Backend only running at http://localhost:5000
     )
 ) else if "%TARGET%"=="test" (
+    echo 🧪 Running tests...
     python -m pytest tests/ -v
 ) else if "%TARGET%"=="setup" (
+    echo ⚙️ Running setup...
     python scripts/setup/setup.py
+) else if "%TARGET%"=="setup-pin" (
+    echo 🔐 PIN Management...
+    python setup_pin.py
 ) else if "%TARGET%"=="debug" (
-    python main.py --verbose --interface cli
-        exit /b 1
-    )
+    echo 🐛 Starting in debug mode (authentication disabled)...
+    python main.py --verbose --interface cli --skip-auth
 ) else (
     echo ❌ Unknown target: %TARGET%
     pause

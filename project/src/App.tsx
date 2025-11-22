@@ -169,9 +169,9 @@ function App() {
     }
   };
 
-  const handleAuthSuccess = (token: string, user: string) => {
+  const handleAuthSuccess = (token: string) => {
     setAuthToken(token);
-    setUsername(user);
+    setUsername('assistant_user');
     setIsAuthenticated(true);
   };
 

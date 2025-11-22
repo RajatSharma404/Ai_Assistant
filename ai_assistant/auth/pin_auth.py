@@ -327,6 +327,32 @@ def authenticate() -> bool:
     return auth.prompt_for_pin()
 
 
+def require_pin_auth(skip_auth_arg='--skip-auth'):
+    """
+    Decorator/helper function to add PIN authentication to any script
+    
+    Usage:
+    if __name__ == "__main__":
+        require_pin_auth()
+        main()
+    """
+    import sys
+    import argparse
+    
+    # Check for skip auth argument
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument(skip_auth_arg, action='store_true', help='Skip PIN authentication')
+    args, unknown = parser.parse_known_args()
+    
+    if not getattr(args, skip_auth_arg.lstrip('--').replace('-', '_')):
+        print("🔐 PIN Authentication Required")
+        print("-" * 30)
+        if not authenticate():
+            print("❌ Authentication failed. Exiting...")
+            sys.exit(1)
+        print("✅ Authentication successful!\n")
+
+
 def setup_pin_cli():
     """CLI utility for PIN setup"""
     print("🔐 YourDaddy Assistant - PIN Setup Utility")

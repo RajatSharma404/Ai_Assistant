@@ -1,11 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YourDaddy Assistant - Enhanced Chat</title>
+    <title>YourDaddy AI</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-color: #343541;
+            --sidebar-bg: #202123;
+            --input-bg: #40414f;
+            --text-primary: #ececf1;
+            --text-secondary: #c5c5d2;
+            --user-msg-bg: #343541;
+            --ai-msg-bg: #444654;
+            --border-color: #4d4d4f;
+            --accent-color: #10a37f;
+            --hover-color: #2a2b32;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -13,677 +28,539 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
             height: 100vh;
             display: flex;
-            justify-content: center;
-            align-items: center;
+            overflow: hidden;
         }
 
-        .chat-container {
-            width: 90%;
-            max-width: 800px;
-            height: 90vh;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        /* Sidebar */
+        .sidebar {
+            width: 260px;
+            background-color: var(--sidebar-bg);
             display: flex;
             flex-direction: column;
-            backdrop-filter: blur(10px);
+            padding: 10px;
+            transition: transform 0.3s ease;
+        }
+
+        .new-chat-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            color: var(--text-primary);
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        .new-chat-btn:hover {
+            background-color: var(--hover-color);
+        }
+
+        .history-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            padding: 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .history-item:hover {
+            background-color: var(--hover-color);
+        }
+
+        /* Main Chat Area */
+        .main-chat {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            background-color: var(--bg-color);
         }
 
         .chat-header {
-            padding: 20px;
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            border-radius: 20px 20px 0 0;
-            color: white;
-            text-align: center;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .status-indicators {
-            display: flex;
-            gap: 10px;
-        }
-
-        .status-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: #ff4757;
-        }
-
-        .status-dot.online {
-            background: #2ed573;
-        }
-
-        .status-dot.processing {
-            background: #ffa502;
-            animation: pulse 1.5s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        .features-panel {
             padding: 10px 20px;
-            background: rgba(116, 75, 162, 0.1);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
             display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
             justify-content: center;
+            align-items: center;
+            color: var(--text-secondary);
+            font-size: 14px;
         }
 
-        .feature-tag {
-            padding: 5px 12px;
-            background: rgba(255, 255, 255, 0.8);
-            border-radius: 15px;
-            font-size: 12px;
-            color: #333;
-            border: 1px solid rgba(116, 75, 162, 0.2);
+        .model-selector {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            padding: 8px 12px;
+            border-radius: 5px;
         }
 
-        .feature-tag.active {
-            background: #4facfe;
-            color: white;
+        .model-selector:hover {
+            background-color: var(--hover-color);
         }
 
+        /* Messages */
         .chat-messages {
             flex: 1;
-            padding: 20px;
             overflow-y: auto;
-            background: rgba(255, 255, 255, 0.9);
+            padding-bottom: 150px;
+            /* Space for input */
+            scroll-behavior: smooth;
         }
 
         .message {
-            margin-bottom: 15px;
             display: flex;
-            align-items: flex-start;
-            gap: 10px;
+            gap: 20px;
+            padding: 24px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .message.assistant {
+            background-color: var(--ai-msg-bg);
         }
 
         .message.user {
-            flex-direction: row-reverse;
+            background-color: var(--bg-color);
         }
 
         .message-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            border-radius: 2px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 18px;
             flex-shrink: 0;
         }
 
         .message.user .message-avatar {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            background-color: #5436DA;
+            /* User color */
+            border-radius: 2px;
         }
 
         .message.assistant .message-avatar {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-color: var(--accent-color);
+            /* AI color */
         }
 
         .message-content {
-            max-width: 70%;
-            padding: 12px 16px;
-            border-radius: 18px;
-            position: relative;
+            flex: 1;
+            max-width: 800px;
+            overflow-wrap: break-word;
         }
 
-        .message.user .message-content {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            color: white;
-        }
-
-        .message.assistant .message-content {
-            background: white;
-            border: 1px solid rgba(0, 0, 0, 0.1);
+        .message-content img {
+            max-width: 100%;
+            border-radius: 8px;
+            margin-top: 10px;
         }
 
         .message-meta {
             font-size: 11px;
-            margin-top: 5px;
-            opacity: 0.7;
+            color: var(--text-secondary);
+            margin-top: 8px;
         }
 
+        /* Suggestions */
         .suggestions {
             display: flex;
-            gap: 8px;
-            margin-top: 10px;
+            gap: 10px;
             flex-wrap: wrap;
+            margin-top: 10px;
         }
 
         .suggestion-btn {
-            padding: 6px 12px;
-            background: rgba(116, 75, 162, 0.1);
-            border: 1px solid rgba(116, 75, 162, 0.3);
-            border-radius: 12px;
+            padding: 8px 12px;
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            color: var(--text-secondary);
             font-size: 12px;
             cursor: pointer;
             transition: all 0.2s;
         }
 
         .suggestion-btn:hover {
-            background: #764ba2;
-            color: white;
+            background-color: var(--hover-color);
         }
 
-        .chat-input-area {
+        /* Input Area */
+        .input-area-container {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: linear-gradient(180deg, rgba(53, 53, 65, 0) 0%, var(--bg-color) 50%);
             padding: 20px;
-            background: white;
-            border-radius: 0 0 20px 20px;
-            border-top: 1px solid rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
-        .input-container {
+        .input-wrapper {
+            width: 100%;
+            max-width: 768px;
+            background-color: var(--input-bg);
+            border: 1px solid rgba(32, 33, 35, 0.5);
+            border-radius: 12px;
+            padding: 10px 16px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
             display: flex;
+            flex-direction: column;
             gap: 10px;
-            align-items: center;
+        }
+
+        .input-row {
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
         }
 
         .chat-input {
             flex: 1;
-            padding: 12px 16px;
-            border: 2px solid rgba(116, 75, 162, 0.2);
-            border-radius: 25px;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 16px;
+            resize: none;
+            max-height: 200px;
+            padding: 8px 0;
             outline: none;
-            font-size: 14px;
-            transition: all 0.2s;
+            line-height: 1.5;
         }
 
-        .chat-input:focus {
-            border-color: #4facfe;
+        .action-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 4px;
+            transition: color 0.2s, background-color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        .send-btn, .extra-btn {
-            width: 45px;
-            height: 45px;
+        .action-btn:hover {
+            background-color: rgba(0, 0, 0, 0.2);
+            color: var(--text-primary);
+        }
+
+        .send-btn {
+            background-color: var(--accent-color);
+            /* Send button color */
+            color: white;
+            border-radius: 4px;
+            padding: 8px;
+        }
+
+        .send-btn:hover {
+            background-color: #1a7f64;
+        }
+
+        .disclaimer {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        /* Image Preview */
+        .image-preview-container {
+            display: flex;
+            gap: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 5px;
+        }
+
+        .preview-thumb {
+            position: relative;
+            width: 60px;
+            height: 60px;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .preview-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .remove-img {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
             border: none;
             border-radius: 50%;
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            color: white;
+            width: 16px;
+            height: 16px;
+            font-size: 10px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 16px;
-            transition: transform 0.2s;
         }
 
-        .send-btn:hover, .extra-btn:hover {
-            transform: scale(1.1);
-        }
-
-        .extra-btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-
-        .extra-controls {
-            display: flex;
-            gap: 10px;
-            margin-top: 10px;
-            justify-content: center;
-        }
-
-        .control-btn {
-            padding: 8px 16px;
-            background: rgba(116, 75, 162, 0.1);
-            border: 1px solid rgba(116, 75, 162, 0.3);
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 12px;
-            transition: all 0.2s;
-        }
-
-        .control-btn:hover {
-            background: #764ba2;
-            color: white;
-        }
-
+        /* Typing Indicator */
         .typing-indicator {
-            display: none;
-            padding: 10px;
+            padding: 24px;
+            color: var(--text-secondary);
             font-style: italic;
-            color: #666;
+            display: none;
+            background-color: var(--ai-msg-bg);
         }
 
-        .typing-dots {
-            display: inline-block;
-            animation: typing 1.4s infinite;
-        }
-
-        @keyframes typing {
-            0%, 60%, 100% { opacity: 0; }
-            30% { opacity: 1; }
-        }
-
-        .image-preview {
-            max-width: 200px;
-            max-height: 200px;
-            border-radius: 10px;
-            margin: 10px 0;
-        }
-
-        .error-message {
-            background: #ff4757;
-            color: white;
-            padding: 10px;
-            border-radius: 10px;
-            margin: 10px 0;
-            font-size: 12px;
-        }
-
-        .success-message {
-            background: #2ed573;
-            color: white;
-            padding: 10px;
-            border-radius: 10px;
-            margin: 10px 0;
-            font-size: 12px;
-        }
-
-        /* Responsive */
+        /* Mobile Responsive */
         @media (max-width: 768px) {
-            .chat-container {
-                width: 95%;
-                height: 95vh;
-                border-radius: 15px;
-            }
-
-            .features-panel {
+            .sidebar {
                 display: none;
+                /* Hidden by default on mobile for now */
             }
 
-            .message-content {
-                max-width: 85%;
+            .message {
+                padding: 15px;
+            }
+
+            .input-wrapper {
+                width: 95%;
             }
         }
     </style>
 </head>
+
 <body>
-    <div class="chat-container">
-        <div class="chat-header">
-            <h1>🤖 YourDaddy Enhanced Chat</h1>
-            <div class="status-indicators">
-                <div class="status-dot" id="connection-status" title="Connection"></div>
-                <div class="status-dot" id="ai-status" title="AI Status"></div>
-                <div class="status-dot" id="voice-status" title="Voice"></div>
-            </div>
+
+    <div class="sidebar">
+        <div class="new-chat-btn" onclick="clearChat()">
+            <span>+</span> New chat
         </div>
-
-        <div class="features-panel" id="features-panel">
-            <!-- Features will be loaded dynamically -->
-        </div>
-
-        <div class="chat-messages" id="chat-messages">
-            <div class="message assistant">
-                <div class="message-avatar">🤖</div>
-                <div class="message-content">
-                    Welcome to YourDaddy Enhanced Chat! 🎉<br>
-                    I can help you with apps, weather, music, translations, screen analysis, automation, and much more!<br>
-                    Try saying something like "What can you do?" or "Open Chrome"
-                </div>
-            </div>
-        </div>
-
-        <div class="typing-indicator" id="typing-indicator">
-            Assistant is thinking<span class="typing-dots">...</span>
-        </div>
-
-        <div class="chat-input-area">
-            <div class="input-container">
-                <input type="file" id="image-input" accept="image/*" style="display: none;">
-                <button class="extra-btn" onclick="document.getElementById('image-input').click()" title="Upload Image">📷</button>
-                <input type="text" class="chat-input" id="chat-input" placeholder="Type your message or ask anything..." maxlength="500">
-                <button class="send-btn" onclick="sendMessage()" title="Send Message">➤</button>
-                <button class="extra-btn" onclick="analyzeScreen()" title="Analyze Screen">🖥️</button>
-            </div>
-            
-            <div class="extra-controls">
-                <div class="control-btn" onclick="getSystemStatus()">📊 System</div>
-                <div class="control-btn" onclick="getWeather()">🌤️ Weather</div>
-                <div class="control-btn" onclick="getSuggestions()">💡 Suggestions</div>
-                <div class="control-btn" onclick="clearChat()">🗑️ Clear</div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // Global variables
-        let socket;
-        let currentContext = null;
-        let isConnected = false;
-        let selectedImage = null;
-
-        // Initialize on page load
-        window.addEventListener('load', function() {
-            initializeSocket();
-            loadFeatures();
-            setupEventListeners();
-            updateStatus();
+        console.log('Connected to server');
         });
 
-        // Socket.IO initialization
-        function initializeSocket() {
-            socket = io();
-            
-            socket.on('connect', function() {
-                isConnected = true;
-                updateStatus();
-                addSystemMessage('Connected to YourDaddy Assistant! 🎉', 'success');
-            });
+        socket.on('disconnect', function() {
+        isConnected = false;
+        console.log('Disconnected from server');
+        });
 
-            socket.on('disconnect', function() {
-                isConnected = false;
-                updateStatus();
-                addSystemMessage('Disconnected from server', 'error');
-            });
+        socket.on('enhanced_chat_response', function(data) {
+        hideTyping();
+        addMessage(data.response, 'assistant', {
+        features_used: data.features_used,
+        suggestions: data.suggestions,
+        mood: data.mood
+        });
+        });
 
-            socket.on('enhanced_chat_response', function(data) {
-                hideTyping();
-                addMessage(data.response, 'assistant', {
-                    features_used: data.features_used,
-                    suggestions: data.suggestions,
-                    mood: data.mood,
-                    detected_language: data.detected_language,
-                    message_type: data.message_type
-                });
-                updateFeatureStatus(data.features_used);
-            });
+        socket.on('enhanced_chat_error', function(data) {
+        hideTyping();
+        addMessage('Error: ' + data.error, 'assistant'); // Show error as assistant message for now
+        });
 
-            socket.on('enhanced_chat_error', function(data) {
-                hideTyping();
-                addSystemMessage('Error: ' + data.error, 'error');
-            });
-
-            socket.on('suggestions_response', function(data) {
-                displaySuggestions(data.suggestions);
-            });
-
-            socket.on('screen_analysis_response', function(data) {
-                hideTyping();
-                addMessage('🖥️ Screen Analysis: ' + data.analysis, 'assistant');
-            });
-
-            socket.on('image_analysis_response', function(data) {
-                hideTyping();
-                addMessage('🖼️ Image Analysis: ' + data.analysis, 'assistant');
-            });
-        }
-
-        // Load available features
-        async function loadFeatures() {
-            try {
-                const response = await fetch('/api/features');
-                const features = await response.json();
-                displayFeatures(features);
-            } catch (error) {
-                console.error('Failed to load features:', error);
-            }
-        }
-
-        // Display features in panel
-        function displayFeatures(features) {
-            const panel = document.getElementById('features-panel');
-            panel.innerHTML = '';
-            
-            // Core features
-            Object.entries(features).forEach(([feature, status]) => {
-                if (typeof status === 'boolean') {
-                    const tag = document.createElement('div');
-                    tag.className = `feature-tag ${status ? 'active' : ''}`;
-                    tag.textContent = feature.replace('_', ' ').toUpperCase();
-                    tag.title = status ? 'Available' : 'Not Available';
-                    panel.appendChild(tag);
-                }
-            });
-        }
-
-        // Update feature status based on usage
-        function updateFeatureStatus(usedFeatures) {
-            const tags = document.querySelectorAll('.feature-tag');
-            tags.forEach(tag => {
-                const featureName = tag.textContent.toLowerCase().replace(' ', '_');
-                if (usedFeatures.some(used => used.toLowerCase().includes(featureName))) {
-                    tag.style.background = '#2ed573';
-                    setTimeout(() => {
-                        tag.style.background = '';
-                    }, 2000);
-                }
-            });
+        socket.on('screen_analysis_response', function(data) {
+        hideTyping();
+        addMessage('🖥️ Screen Analysis: ' + data.analysis, 'assistant');
+        });
         }
 
         // Setup event listeners
         function setupEventListeners() {
-            const input = document.getElementById('chat-input');
-            
-            input.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    sendMessage();
-                }
-            });
+        const input = document.getElementById('chat-input');
 
-            // Image upload handler
-            document.getElementById('image-input').addEventListener('change', function(e) {
-                const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        selectedImage = e.target.result.split(',')[1]; // Remove data:image/...;base64,
-                        addImagePreview(e.target.result);
-                    };
-                    reader.readAsDataURL(file);
-                }
-            });
+        input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+        }
+        });
+
+        // Auto-resize textarea
+        input.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
+        if(this.value === '') this.style.height = 'auto';
+        });
+
+        // Image upload handler
+        document.getElementById('image-input').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+        selectedImage = e.target.result.split(',')[1];
+        showImagePreview(e.target.result);
+        };
+        reader.readAsDataURL(file);
+        }
+        });
         }
 
         // Send message function
         function sendMessage() {
-            const input = document.getElementById('chat-input');
-            const message = input.value.trim();
-            
-            if (!message && !selectedImage) return;
-            
-            // Add user message to chat
-            if (message) {
-                addMessage(message, 'user');
-            }
-            
-            if (selectedImage) {
-                addImageMessage(selectedImage, 'user');
-            }
-            
-            // Show typing indicator
-            showTyping();
-            
-            // Send to server via socket
-            socket.emit('enhanced_chat', {
-                message: message,
-                context: currentContext || {},
-                image: selectedImage
-            });
-            
-            // Clear input and image
-            input.value = '';
-            selectedImage = null;
-            clearImagePreview();
+        const input = document.getElementById('chat-input');
+        const message = input.value.trim();
+
+        if (!message && !selectedImage) return;
+
+        // Add user message to chat
+        if (message) {
+        addMessage(message, 'user');
+        }
+
+        if (selectedImage) {
+        // We can display the image in the user message too
+        // For now, let's just send it.
+        // Ideally we append the image to the message bubble.
+        }
+
+        showTyping();
+
+        socket.emit('enhanced_chat', {
+        message: message,
+        context: currentContext || {},
+        image: selectedImage
+        });
+
+        // Clear input and image
+        input.value = '';
+        input.style.height = 'auto';
+        selectedImage = null;
+        clearImagePreview();
         }
 
         // Add message to chat
         function addMessage(content, sender, metadata = {}) {
-            const messagesContainer = document.getElementById('chat-messages');
-            const messageElement = document.createElement('div');
-            messageElement.className = `message ${sender}`;
-            
-            const avatar = document.createElement('div');
-            avatar.className = 'message-avatar';
-            avatar.textContent = sender === 'user' ? '👤' : '🤖';
-            
-            const messageContent = document.createElement('div');
-            messageContent.className = 'message-content';
-            messageContent.innerHTML = content;
-            
-            if (metadata.features_used && metadata.features_used.length > 0) {
-                const metaInfo = document.createElement('div');
-                metaInfo.className = 'message-meta';
-                metaInfo.textContent = `Features: ${metadata.features_used.join(', ')} | Mood: ${metadata.mood || 'neutral'}`;
-                messageContent.appendChild(metaInfo);
-            }
-            
-            messageElement.appendChild(avatar);
-            messageElement.appendChild(messageContent);
-            
-            // Add suggestions if available
-            if (metadata.suggestions && metadata.suggestions.length > 0) {
-                const suggestionsDiv = document.createElement('div');
-                suggestionsDiv.className = 'suggestions';
-                metadata.suggestions.forEach(suggestion => {
-                    const btn = document.createElement('div');
-                    btn.className = 'suggestion-btn';
-                    btn.textContent = suggestion.text || suggestion;
-                    btn.onclick = () => {
-                        document.getElementById('chat-input').value = suggestion.text || suggestion;
-                        sendMessage();
-                    };
-                    suggestionsDiv.appendChild(btn);
-                });
-                messageContent.appendChild(suggestionsDiv);
-            }
-            
-            messagesContainer.appendChild(messageElement);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        const messagesContainer = document.getElementById('chat-messages');
+        const messageElement = document.createElement('div');
+        messageElement.className = `message ${sender}`;
+
+        const avatar = document.createElement('div');
+        avatar.className = 'message-avatar';
+        avatar.textContent = sender === 'user' ? '👤' : '🤖';
+
+        const messageContent = document.createElement('div');
+        messageContent.className = 'message-content';
+
+        // Handle image display if this message is from user and has image (logic simplified here)
+        // If content is text, set innerHTML
+        messageContent.innerHTML = content; // Be careful with XSS if content is user input, but for now assuming safe
+
+        if (metadata.features_used && metadata.features_used.length > 0) {
+        const metaInfo = document.createElement('div');
+        metaInfo.className = 'message-meta';
+        metaInfo.textContent = `Used: ${metadata.features_used.join(', ')}`;
+        messageContent.appendChild(metaInfo);
         }
 
-        // Add system message
-        function addSystemMessage(content, type = 'info') {
-            const messagesContainer = document.getElementById('chat-messages');
-            const messageElement = document.createElement('div');
-            messageElement.className = `${type}-message`;
-            messageElement.textContent = content;
-            messagesContainer.appendChild(messageElement);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        messageElement.appendChild(avatar);
+        messageElement.appendChild(messageContent);
+
+        // Add suggestions if available
+        if (metadata.suggestions && metadata.suggestions.length > 0) {
+        const suggestionsDiv = document.createElement('div');
+        suggestionsDiv.className = 'suggestions';
+        metadata.suggestions.forEach(suggestion => {
+        const btn = document.createElement('div');
+        btn.className = 'suggestion-btn';
+        btn.textContent = suggestion.text || suggestion;
+        btn.onclick = () => {
+        document.getElementById('chat-input').value = suggestion.text || suggestion;
+        sendMessage();
+        };
+        suggestionsDiv.appendChild(btn);
+        });
+        messageContent.appendChild(suggestionsDiv);
         }
 
-        // Add image message
-        function addImageMessage(imageData, sender) {
-            const messagesContainer = document.getElementById('chat-messages');
-            const messageElement = document.createElement('div');
-            messageElement.className = `message ${sender}`;
-            
-            const avatar = document.createElement('div');
-            avatar.className = 'message-avatar';
-            avatar.textContent = sender === 'user' ? '👤' : '🤖';
-            
-            const messageContent = document.createElement('div');
-            messageContent.className = 'message-content';
-            
-            const img = document.createElement('img');
-            img.src = 'data:image/jpeg;base64,' + imageData;
-            img.className = 'image-preview';
-            messageContent.appendChild(img);
-            
-            messageElement.appendChild(avatar);
-            messageElement.appendChild(messageContent);
-            messagesContainer.appendChild(messageElement);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        messagesContainer.appendChild(messageElement);
+
+        // Scroll to bottom
+        // We need to scroll the container, not the body
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+        // Also ensure the window view is correct if needed, but flex handles it.
+        // Actually, with the new layout, we just scroll chat-messages.
+        messagesContainer.scrollTo({
+        top: messagesContainer.scrollHeight,
+        behavior: 'smooth'
+        });
         }
 
-        // Show/hide typing indicator
         function showTyping() {
-            document.getElementById('typing-indicator').style.display = 'block';
+        const indicator = document.getElementById('typing-indicator');
+        indicator.style.display = 'block';
+        // Scroll to show typing
+        const messagesContainer = document.getElementById('chat-messages');
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
 
         function hideTyping() {
-            document.getElementById('typing-indicator').style.display = 'none';
+        document.getElementById('typing-indicator').style.display = 'none';
         }
 
         // Image preview functions
-        function addImagePreview(imageSrc) {
-            const inputArea = document.querySelector('.chat-input-area');
-            let preview = document.getElementById('image-preview');
-            if (!preview) {
-                preview = document.createElement('div');
-                preview.id = 'image-preview';
-                preview.style.cssText = 'padding: 10px; text-align: center; background: rgba(116, 75, 162, 0.1); border-radius: 10px; margin-bottom: 10px;';
-                inputArea.insertBefore(preview, inputArea.firstChild);
-            }
-            preview.innerHTML = `<img src="${imageSrc}" style="max-width: 100px; max-height: 100px; border-radius: 5px;"> <button onclick="clearImagePreview()">❌</button>`;
+        function showImagePreview(imageSrc) {
+        const area = document.getElementById('image-preview-area');
+        area.style.display = 'flex';
+        area.innerHTML = `
+        <div class="preview-thumb">
+            <img src="${imageSrc}">
+            <button class="remove-img" onclick="clearImagePreview()">×</button>
+        </div>
+        `;
         }
 
         function clearImagePreview() {
-            const preview = document.getElementById('image-preview');
-            if (preview) {
-                preview.remove();
-            }
+        const area = document.getElementById('image-preview-area');
+        area.style.display = 'none';
+        area.innerHTML = '';
+        document.getElementById('image-input').value = '';
+        selectedImage = null;
         }
 
-        // Utility functions
         function analyzeScreen() {
-            showTyping();
-            socket.emit('analyze_screen', {
-                prompt: 'What applications and content are currently visible on the screen?'
-            });
-        }
-
-        async function getSystemStatus() {
-            try {
-                const response = await fetch('/api/system/stats');
-                const stats = await response.json();
-                const statusText = `💻 System Status:\\nCPU: ${stats.cpu_usage}%\\nMemory: ${stats.memory_usage}%\\nDisk: ${stats.disk_usage}%\\nTasks: ${stats.active_tasks}`;
-                addMessage(statusText, 'assistant');
-            } catch (error) {
-                addSystemMessage('Failed to get system status', 'error');
-            }
-        }
-
-        async function getWeather() {
-            try {
-                const response = await fetch('/api/weather');
-                const weather = await response.json();
-                const weatherText = `🌤️ Weather: ${weather.temperature} - ${weather.description}\\nHumidity: ${weather.humidity}\\nWind: ${weather.wind_speed}`;
-                addMessage(weatherText, 'assistant');
-            } catch (error) {
-                addSystemMessage('Failed to get weather', 'error');
-            }
-        }
-
-        function getSuggestions() {
-            socket.emit('get_suggestions');
-        }
-
-        function displaySuggestions(suggestions) {
-            if (suggestions.length > 0) {
-                const suggestionsText = '💡 Here are some suggestions:\\n' + suggestions.map(s => `• ${s.text || s}`).join('\\n');
-                addMessage(suggestionsText, 'assistant');
-            }
+        showTyping();
+        socket.emit('analyze_screen', {
+        prompt: 'What is on the screen?'
+        });
         }
 
         function clearChat() {
-            document.getElementById('chat-messages').innerHTML = `
-                <div class="message assistant">
-                    <div class="message-avatar">🤖</div>
-                    <div class="message-content">
-                        Chat cleared! How can I help you? 😊
-                    </div>
-                </div>
-            `;
+        document.getElementById('chat-messages').innerHTML = `
+        <div class="message assistant">
+            <div class="message-avatar">🤖</div>
+            <div class="message-content">
+                Chat cleared! How can I help you?
+            </div>
+        </div>
+        `;
         }
-
-        function updateStatus() {
-            const connectionStatus = document.getElementById('connection-status');
-            const aiStatus = document.getElementById('ai-status');
-            
-            connectionStatus.className = isConnected ? 'status-dot online' : 'status-dot';
-            aiStatus.className = 'status-dot online'; // Assume AI is available if connected
-        }
-    </script>
+        </script>
 </body>
+
 </html>

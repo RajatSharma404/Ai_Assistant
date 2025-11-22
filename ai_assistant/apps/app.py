@@ -221,6 +221,8 @@ def main():
                        help='Web server port (default: 5000)')
     parser.add_argument('--host', default='0.0.0.0', 
                        help='Web server host (default: 0.0.0.0)')
+    parser.add_argument('--skip-auth', action='store_true', 
+                       help='Skip PIN authentication (development only)')
     
     args = parser.parse_args()
     
@@ -228,6 +230,26 @@ def main():
     if args.mode == 'help':
         show_help()
         return
+    
+    # PIN Authentication (unless skipped or in check mode)
+    if not args.skip_auth and args.mode != 'check':
+        print("🔐 PIN Authentication Required")
+        print("-" * 30)
+        try:
+            import sys
+            sys.path.insert(0, '../../')  # Add root directory to path
+            from ai_assistant.auth import authenticate
+            if not authenticate():
+                print("❌ Authentication failed. Exiting...")
+                sys.exit(1)
+            print("✅ Authentication successful!\n")
+        except ImportError as e:
+            logger.error(f"Error importing PIN authentication: {e}")
+            print("❌ Authentication module not available. Please run from main.py or setup authentication.")
+            sys.exit(1)
+        except Exception as e:
+            logger.error(f"Authentication error: {e}")
+            sys.exit(1)
     
     # Set debug mode
     if args.debug:

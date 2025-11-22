@@ -4,6 +4,7 @@ Automatically uses GPT/Gemini when online, falls back to local models when offli
 """
 
 import os
+import json
 import requests
 import logging
 from typing import Dict, Tuple, Optional
@@ -16,23 +17,14 @@ class NetworkAwareLLMConfig:
     
     def __init__(self):
         self.last_check = None
-        self.network_status = None
-        self.check_interval = timedelta(minutes=5)  # Check every 5 minutes
-        
-        # Priority configuration - Your powerful local models first!
-        self.local_providers = [
-            ("ollama", "gemma3:27b", True),  # Your 27B model - PRIORITY
-            ("ollama", "gpt-oss:20b", True)  # Your 20B model - PRIORITY  
-        ]
-        
-        self.online_providers = [
-            ("openai", "gpt-4o", os.getenv("OPENAI_API_KEY")),
-            ("openai", "gpt-4", os.getenv("OPENAI_API_KEY")), 
-            ("openai", "gpt-3.5-turbo", os.getenv("OPENAI_API_KEY")), 
-            ("gemini", "gemini-1.5-pro", os.getenv("GEMINI_API_KEY")),
-            ("gemini", "gemini-1.5-flash", os.getenv("GEMINI_API_KEY"))
-        ]
-    
+            key_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "api_keys.json")
+            if os.path.exists(key_file):
+                with open(key_file, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to load api_keys.json: {e}")
+        return {}
+
     def check_internet_connectivity(self) -> bool:
         """Check if internet connection is available."""
         # Cache the result to avoid excessive checks

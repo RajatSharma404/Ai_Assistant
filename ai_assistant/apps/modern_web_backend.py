@@ -22,7 +22,6 @@ from flask_jwt_extended import (
 )
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 import os
 import sys
@@ -35,59 +34,6 @@ import re
 import secrets
 import logging
 # Fix Windows console encoding for emojis
-if sys.platform == 'win32':
-    sys.stdout.reconfigure(encoding='utf-8') if hasattr(sys.stdout, 'reconfigure') else None
-    sys.stderr.reconfigure(encoding='utf-8') if hasattr(sys.stderr, 'reconfigure') else None
-
-# Load environment variables
-load_dotenv()
-
-# Setup centralized logging
-from utils.logging_config import get_logger, get_api_logger
-from utils.user_data_logger import log_query, log_reply, log_action, log_module_usage
-logger = get_logger('web_backend', log_category='backend')
-api_logger = get_api_logger('api_requests')
-
-logger.info("="*80)
-logger.info("YourDaddy Assistant - Web Backend Starting")
-logger.info("="*80)
-
-# Validate configuration before starting
-try:
-    from config_validator import validate_config
-    print("🔍 Validating configuration...")
-    config_validator = validate_config(exit_on_failure=True)
-except Exception as e:
-    print(f"❌ Configuration validation failed: {e}")
-    print("Please check your .env file and fix the configuration.")
-    sys.exit(1)
-
-# Import automation tools
-try:
-    from automation_tools_new import (
-        write_a_note, open_application, search_google, search_youtube,
-        close_application, speak, set_system_volume, get_app_path_from_name,
-        setup_memory, save_to_memory, get_memory, search_memory,
-        get_conversation_summary, save_knowledge, get_knowledge,
-        discover_applications, smart_open_application, list_installed_apps,
-        refresh_app_database, search_apps_by_name, get_app_usage_stats, get_apps_for_web,
-        get_system_status, get_running_processes, cleanup_temp_files,
-        get_network_info, get_upcoming_events, get_inbox_summary,
-        get_spotify_status, spotify_play_pause, spotify_next_track,
-        spotify_previous_track, search_and_play_spotify,
-        get_weather_info, get_latest_news, get_stock_price,
-        detect_taskbar_apps, can_see_taskbar
-    )
-    AUTOMATION_AVAILABLE = True
-    print("✅ Automation tools loaded successfully")
-except ImportError as e:
-    print(f"⚠️ Automation tools not available: {e}")
-    AUTOMATION_AVAILABLE = False
-    # Fallback functions will be defined below
-
-# Import multimodal AI if available
-try:
-    from modules.multimodal import MultiModalAI
     MULTIMODAL_AVAILABLE = True
 except ImportError:
     MULTIMODAL_AVAILABLE = False
@@ -192,19 +138,10 @@ socketio = SocketIO(
     engineio_logger=False
 )
 
-# User Management (Simple in-memory store - replace with database in production)
-USERS_DB = {
-    "admin": {
-        "password_hash": generate_password_hash(os.getenv('ADMIN_PASSWORD', 'changeme123')),
-        "role": "admin"
-    }
-}
-
 # Input Validation Patterns
 VALIDATION_PATTERNS = {
     'command': re.compile(r'^[\w\s\-.,!?@#$%()+=:;"\']+$'),
     'app_name': re.compile(r'^[\w\s\-.]+$'),
-    'username': re.compile(r'^[a-zA-Z0-9_]{3,20}$'),
 }
 
 def validate_input(data, field, pattern_name):
@@ -1365,85 +1302,32 @@ def test_page():
     """
 
 # Authentication Routes
-@app.route('/api/auth/register', methods=['POST'])
-@limiter.limit("3 per hour")  # Prevent abuse
-def api_register():
-    """Register a new user"""
-    try:
-        data = request.get_json()
-        
-        # Validate input
-        is_valid, error = validate_input(data, 'username', 'username')
-        if not is_valid:
-            return jsonify({"error": error}), 400
-        
-        if 'password' not in data:
-            return jsonify({"error": "Password is required"}), 400
-        
-        username = data['username']
-        password = data['password']
-        
-        # Check password strength
-        if len(password) < 6:
-            return jsonify({"error": "Password must be at least 6 characters"}), 400
-        
-        # Check if user already exists
-        if username in USERS_DB:
-            return jsonify({"error": "Username already exists"}), 409
-        
-        # Create new user
-        USERS_DB[username] = {
-            "password_hash": generate_password_hash(password),
-            "role": "user"
-        }
-        
-        # Create tokens
-        access_token = create_access_token(
-            identity=username,
-            additional_claims={"role": "user"}
-        )
-        
-        return jsonify({
-            "access_token": access_token,
-            "token_type": "Bearer",
-            "expires_in": 86400,
-            "user": {
-                "username": username,
-                "role": "user"
-            },
-            "message": "Registration successful"
-        }), 201
-        
-    except Exception as e:
-        return jsonify({"error": "Registration failed"}), 500
-
 @app.route('/api/auth/login', methods=['POST'])
 @limiter.limit("5 per minute")  # Prevent brute force
 def api_login():
-    """Authenticate user and return JWT token"""
+    """Authenticate user with PIN only and return JWT token"""
     try:
         data = request.get_json()
+            
+        if 'pin' not in data:
+            return jsonify({"error": "PIN is required for authentication"}), 400
         
-        # Validate input
-        is_valid, error = validate_input(data, 'username', 'username')
-        if not is_valid:
-            return jsonify({"error": error}), 400
+        pin = data['pin']
         
-        if 'password' not in data:
-            return jsonify({"error": "Password is required"}), 400
+        # Verify PIN
+        try:
+            from ai_assistant.auth.pin_auth import PINAuth
+            pin_auth = PINAuth()
+            if not pin_auth.verify_pin(pin):
+                return jsonify({"error": "Invalid PIN"}), 401
+        except Exception as e:
+            logger.error(f"PIN verification failed: {e}")
+            return jsonify({"error": "PIN verification failed"}), 401
         
-        username = data['username']
-        password = data['password']
-        
-        # Check credentials
-        user = USERS_DB.get(username)
-        if not user or not check_password_hash(user['password_hash'], password):
-            return jsonify({"error": "Invalid credentials"}), 401
-        
-        # Create tokens
+        # Create tokens with default user (no username/password needed)
         access_token = create_access_token(
-            identity=username,
-            additional_claims={"role": user['role']}
+            identity="assistant_user",
+            additional_claims={"role": "admin"}
         )
         
         return jsonify({
@@ -1451,8 +1335,8 @@ def api_login():
             "token_type": "Bearer",
             "expires_in": 86400,  # 24 hours
             "user": {
-                "username": username,
-                "role": user['role']
+                "username": "assistant_user",
+                "role": "admin"
             }
         }), 200
         
@@ -1462,50 +1346,6 @@ def api_login():
 @app.route('/api/auth/verify', methods=['GET'])
 @jwt_required()
 def api_verify_token():
-    """Verify JWT token is valid"""
-    current_user = get_jwt_identity()
-    user = USERS_DB.get(current_user)
-    
-    return jsonify({
-        "valid": True,
-        "user": {
-            "username": current_user,
-            "role": user['role'] if user else "user"
-        }
-    }), 200
-
-# API Routes
-@app.route('/api/status')
-def api_status():
-    """API status endpoint - Public"""
-    authenticated = False
-    try:
-        verify_jwt_in_request(optional=True)
-        authenticated = bool(get_jwt_identity())
-    except:
-        pass
-    
-    return jsonify({
-        "status": "online",
-        "timestamp": datetime.now().isoformat(),
-        "authenticated": authenticated,
-        "services": {
-            "automation": AUTOMATION_AVAILABLE,
-            "multimodal": MULTIMODAL_AVAILABLE,
-            "conversational_ai": CONVERSATIONAL_AI_AVAILABLE,
-            "voice": VOICE_AVAILABLE,
-            "system_monitoring": PSUTIL_AVAILABLE
-        }
-    })
-
-@app.route('/api/chat', methods=['POST'])
-@jwt_required(optional=True)
-@limiter.limit("60 per minute")
-def api_chat():
-    """Enhanced chat endpoint with full AI integration"""
-    try:
-        current_user = get_jwt_identity() or "anonymous"
-        data = request.get_json()
         
         # Validate input
         is_valid, error = validate_input(data, 'message', 'command')
@@ -3408,6 +3248,32 @@ if __name__ == '__main__':
     print("=" * 60)
     print("🚀 YourDaddy Assistant - Modern Web Backend")
     print("=" * 60)
+    
+    # PIN Authentication for direct web backend access
+    import argparse
+    parser = argparse.ArgumentParser(description='YourDaddy Assistant Web Backend')
+    parser.add_argument('--skip-auth', action='store_true', help='Skip PIN authentication (development only)')
+    args, unknown = parser.parse_known_args()
+    
+    if not args.skip_auth:
+        print("🔐 PIN Authentication Required")
+        print("-" * 30)
+        try:
+            import sys
+            sys.path.insert(0, '../..')  # Add parent directory to path
+            from ai_assistant.auth import authenticate
+            if not authenticate():
+                print("❌ Authentication failed. Exiting...")
+                sys.exit(1)
+            print("✅ Authentication successful!\n")
+        except ImportError as e:
+            print(f"❌ Error importing PIN authentication: {e}")
+            print("Please ensure you're running from the correct directory or use main.py")
+            sys.exit(1)
+        except Exception as e:
+            print(f"❌ Authentication error: {e}")
+            sys.exit(1)
+    
     print("🌐 Server starting on: http://localhost:5000")
     print("📱 React frontend will be served automatically")
     print("⚡ Real-time features enabled via WebSockets")
@@ -3420,13 +3286,14 @@ if __name__ == '__main__':
         host = os.getenv('HOST', '127.0.0.1')
         port = int(os.getenv('PORT', 5000))
         
-        print(f"🔒 Security: JWT authentication enabled")
+        print(f"🔒 Security: PIN authentication required")
+        print(f"🔒 Security: JWT tokens for session management")
         print(f"🔒 Security: Rate limiting enabled")
         print(f"🔒 Security: CORS restricted to: {', '.join(ALLOWED_ORIGINS)}")
         print(f"🔒 Security: Host binding: {host}")
         print("")
-        print(f"⚠️  Default credentials: username='admin', password='{os.getenv('ADMIN_PASSWORD', 'changeme123')}'")
-        print("⚠️  CHANGE THE PASSWORD in .env file before production!")
+        print("🔐 Authentication: PIN required for all access")
+        print("💡 Tip: Use --skip-auth flag to bypass PIN during development")
         print("")
         
         socketio.run(app, host=host, port=port, debug=False, allow_unsafe_werkzeug=True)
