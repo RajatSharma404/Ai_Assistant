@@ -78,21 +78,21 @@ except ImportError as e:
 
 # Import multimodal AI if available
 try:
-    from modules.multimodal import MultiModalAI
+    from ai_assistant.multimodal import MultiModalAI
     MULTIMODAL_AVAILABLE = True
 except ImportError:
     MULTIMODAL_AVAILABLE = False
 
 # Import conversational AI if available
 try:
-    from modules.conversational_ai import AdvancedConversationalAI
+    from ai_assistant.modules.conversational_ai import AdvancedConversationalAI
     CONVERSATIONAL_AI_AVAILABLE = True
 except ImportError:
     CONVERSATIONAL_AI_AVAILABLE = False
 
 # Import multilingual support if available
 try:
-    from modules.multilingual import MultilingualSupport, Language, LanguageContext
+    from ai_assistant.multilingual import MultilingualSupport, Language, LanguageContext
     MULTILINGUAL_AVAILABLE = True
     print("âœ… Multilingual support loaded in web backend")
 except ImportError as e:
@@ -104,7 +104,7 @@ except Exception as e:
 
 # Import advanced chat system and LLM providers
 try:
-    from modules.advanced_chat_system import AdvancedChatSystem
+    from ai_assistant.modules.advanced_chat_system import AdvancedChatSystem
     ADVANCED_CHAT_AVAILABLE = True
     print("âœ… Advanced chat system loaded")
 except ImportError as e:
@@ -112,7 +112,7 @@ except ImportError as e:
     print(f"âš ï¸ Advanced chat system not available: {e}")
 
 try:
-    from modules.llm_provider import UnifiedChatInterface, LLMFactory
+    from ai_assistant.modules.llm_provider import UnifiedChatInterface, LLMFactory
     LLM_PROVIDER_AVAILABLE = True
     print("âœ… LLM providers loaded")
 except ImportError as e:
@@ -287,8 +287,8 @@ class ModernAssistant:
     def init_smart_llm(self):
         """Initialize smart network-aware LLM system"""
         try:
-            from modules.network_aware_llm import get_optimal_llm_config
-            from modules.llm_provider import UnifiedChatInterface
+            from ai_assistant.modules.network_aware_llm import get_optimal_llm_config
+            from ai_assistant.modules.llm_provider import UnifiedChatInterface
             
             # Get optimal configuration based on network status
             config = get_optimal_llm_config()
@@ -934,7 +934,7 @@ Just speak naturally - I understand context! ðŸŽ‰"""
             # 5. SMART AUTOMATION DETECTION
             if AUTOMATION_AVAILABLE and processed_message:
                 try:
-                    from modules.smart_automation import SmartAutomationEngine
+                    from ai_assistant.modules.smart_automation import SmartAutomationEngine
                     automation_engine = SmartAutomationEngine()
                     
                     # Detect if message requires automation
@@ -952,7 +952,7 @@ Just speak naturally - I understand context! ðŸŽ‰"""
             
             # 6. ENHANCED LEARNING INTEGRATION
             try:
-                from modules.enhanced_learning import EnhancedLearning
+                from ai_assistant.modules.enhanced_learning import EnhancedLearning
                 learning_system = EnhancedLearning()
                 
                 # Learn from this interaction
@@ -969,7 +969,7 @@ Just speak naturally - I understand context! ðŸŽ‰"""
             
             # 7. ADVANCED INTEGRATION FEATURES
             try:
-                from modules.advanced_integration import AdvancedIntegration
+                from ai_assistant.modules.advanced_integration import AdvancedIntegration
                 advanced_integration = AdvancedIntegration()
                 
                 # Check for integration opportunities
@@ -1859,7 +1859,7 @@ def api_get_workflows():
         if not AUTOMATION_AVAILABLE:
             return jsonify({"workflows": []})
         
-        from modules.smart_automation import SmartAutomationEngine
+        from ai_assistant.modules.smart_automation import SmartAutomationEngine
         automation_engine = SmartAutomationEngine()
         workflows = automation_engine.get_available_workflows()
         
@@ -1882,7 +1882,7 @@ def api_execute_workflow():
         if not workflow_name:
             return jsonify({"error": "Workflow name required"}), 400
         
-        from modules.smart_automation import SmartAutomationEngine
+        from ai_assistant.modules.smart_automation import SmartAutomationEngine
         automation_engine = SmartAutomationEngine()
         result = automation_engine.execute_workflow_by_name(workflow_name)
         
@@ -1985,7 +1985,7 @@ def api_translate_text():
         if not text:
             return jsonify({"error": "Text required"}), 400
         
-        from modules.multilingual import Language
+        from ai_assistant.multilingual import Language
         translated = assistant.multilingual.translate_text(text, Language(target_language))
         
         return jsonify({
@@ -2199,6 +2199,29 @@ def api_voice_history():
     ]
     return jsonify(history)
 
+@app.route('/api/voice/status')
+def api_voice_status():
+    """Get voice system status - PUBLIC"""
+    try:
+        voice_available = VOICE_AVAILABLE and assistant.voice_recognizer is not None
+        return jsonify({
+            "connected": True,
+            "voice_available": voice_available,
+            "features": {
+                "speech_recognition": assistant.voice_recognizer is not None,
+                "text_to_speech": assistant.tts_engine is not None,
+                "wake_word_detection": assistant.wake_word_detector is not None
+            },
+            "listening": getattr(assistant, 'voice_listening', False),
+            "timestamp": datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            "connected": False,
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }), 500
+
 @app.route('/api/voice/start', methods=['POST'])
 @jwt_required()
 @limiter.limit("10 per minute")
@@ -2272,6 +2295,18 @@ def handle_connect():
     emit('connected', {
         'message': 'Connected to YourDaddy Assistant',
         'timestamp': datetime.now().isoformat()
+    })
+    
+    # Send voice server status
+    voice_available = VOICE_AVAILABLE and assistant.voice_recognizer is not None
+    emit('voice_server_status', {
+        'connected': True,
+        'voice_available': voice_available,
+        'features': {
+            'speech_recognition': assistant.voice_recognizer is not None,
+            'text_to_speech': assistant.tts_engine is not None,
+            'wake_word_detection': assistant.wake_word_detector is not None
+        }
     })
 
 @socketio.on('disconnect')
@@ -2483,7 +2518,7 @@ def handle_execute_workflow(data):
             return
         
         if AUTOMATION_AVAILABLE:
-            from modules.smart_automation import SmartAutomationEngine
+            from ai_assistant.modules.smart_automation import SmartAutomationEngine
             automation_engine = SmartAutomationEngine()
             result = automation_engine.execute_workflow_by_name(workflow_name)
             
@@ -2809,7 +2844,7 @@ def api_load_settings():
 def api_organize_files():
     """Organize files by type in a directory"""
     try:
-        from modules.file_ops import organize_files_by_type
+        from ai_assistant.modules.file_ops import organize_files_by_type
         
         data = request.get_json()
         directory = data.get('directory')
@@ -2839,7 +2874,7 @@ def api_organize_files():
 def api_find_duplicates():
     """Find duplicate files in a directory"""
     try:
-        from modules.file_ops import find_duplicate_files
+        from ai_assistant.modules.file_ops import find_duplicate_files
         
         data = request.get_json()
         directory = data.get('directory')
@@ -2865,7 +2900,7 @@ def api_find_duplicates():
 def api_search_files():
     """Search for files with advanced filtering"""
     try:
-        from modules.file_ops import smart_file_search
+        from ai_assistant.modules.file_ops import smart_file_search
         
         data = request.get_json()
         directory = data.get('directory')
@@ -2893,7 +2928,7 @@ def api_search_files():
 def api_batch_rename():
     """Batch rename files using patterns"""
     try:
-        from modules.file_ops import batch_rename_files
+        from ai_assistant.modules.file_ops import batch_rename_files
         
         data = request.get_json()
         directory = data.get('directory')
@@ -2922,7 +2957,7 @@ def api_batch_rename():
 def api_analyze_directory():
     """Analyze directory structure and contents"""
     try:
-        from modules.file_ops import analyze_directory_structure
+        from ai_assistant.modules.file_ops import analyze_directory_structure
         
         data = request.get_json()
         directory = data.get('directory')
@@ -2951,7 +2986,7 @@ def api_analyze_directory():
 def api_ocr_check_dependencies():
     """Check OCR dependencies status"""
     try:
-        from modules.document_ocr import check_ocr_dependencies
+        from ai_assistant.modules.document_ocr import check_ocr_dependencies
         
         result = check_ocr_dependencies()
         
@@ -2970,7 +3005,7 @@ def api_ocr_check_dependencies():
 def api_extract_text_image():
     """Extract text from image using OCR"""
     try:
-        from modules.document_ocr import extract_text_from_image
+        from ai_assistant.modules.document_ocr import extract_text_from_image
         
         data = request.get_json()
         image_path = data.get('image_path')
@@ -2997,7 +3032,7 @@ def api_extract_text_image():
 def api_extract_text_pdf():
     """Extract text from PDF document"""
     try:
-        from modules.document_ocr import extract_text_from_pdf
+        from ai_assistant.modules.document_ocr import extract_text_from_pdf
         
         data = request.get_json()
         pdf_path = data.get('pdf_path')
@@ -3023,7 +3058,7 @@ def api_extract_text_pdf():
 def api_analyze_document():
     """Analyze document structure and metadata"""
     try:
-        from modules.document_ocr import analyze_document_structure
+        from ai_assistant.modules.document_ocr import analyze_document_structure
         
         data = request.get_json()
         file_path = data.get('file_path')
@@ -3048,7 +3083,7 @@ def api_analyze_document():
 def api_extract_key_information():
     """Extract key information from text"""
     try:
-        from modules.document_ocr import extract_key_information
+        from ai_assistant.modules.document_ocr import extract_key_information
         
         data = request.get_json()
         text = data.get('text')
@@ -3077,7 +3112,7 @@ def api_extract_key_information():
 def api_get_weather():
     """Get weather information for a location"""
     try:
-        from modules.web_scraping import get_weather_info
+        from ai_assistant.modules.web_scraping import get_weather_info
         
         location = request.args.get('location', 'New York')
         api_key = request.args.get('api_key')
@@ -3099,7 +3134,7 @@ def api_get_weather():
 def api_get_news():
     """Get latest news headlines"""
     try:
-        from modules.web_scraping import get_latest_news
+        from ai_assistant.modules.web_scraping import get_latest_news
         
         category = request.args.get('category', 'general')
         country = request.args.get('country', 'us')
@@ -3122,7 +3157,7 @@ def api_get_news():
 def api_get_stock():
     """Get stock price information"""
     try:
-        from modules.web_scraping import get_stock_price
+        from ai_assistant.modules.web_scraping import get_stock_price
         
         symbol = request.args.get('symbol', 'AAPL')
         
@@ -3143,7 +3178,7 @@ def api_get_stock():
 def api_get_crypto():
     """Get cryptocurrency price information"""
     try:
-        from modules.web_scraping import get_crypto_price
+        from ai_assistant.modules.web_scraping import get_crypto_price
         
         symbol = request.args.get('symbol', 'bitcoin')
         
@@ -3165,7 +3200,7 @@ def api_get_crypto():
 def api_scrape_website():
     """Scrape website content"""
     try:
-        from modules.web_scraping import scrape_website_content
+        from ai_assistant.modules.web_scraping import scrape_website_content
         
         data = request.get_json()
         url = data.get('url')
@@ -3192,7 +3227,7 @@ def api_scrape_website():
 def api_get_trending():
     """Get trending topics from various platforms"""
     try:
-        from modules.web_scraping import get_trending_topics
+        from ai_assistant.modules.web_scraping import get_trending_topics
         
         platform = request.args.get('platform', 'general')
         
@@ -3218,7 +3253,7 @@ def api_get_trending():
 def api_detect_taskbar():
     """Detect and analyze taskbar applications"""
     try:
-        from modules.taskbar_detection import detect_taskbar_apps
+        from ai_assistant.modules.taskbar_detection import detect_taskbar_apps
         
         result = detect_taskbar_apps()
         
@@ -3236,7 +3271,7 @@ def api_detect_taskbar():
 def api_taskbar_capabilities():
     """Check taskbar detection capabilities"""
     try:
-        from modules.taskbar_detection import can_see_taskbar
+        from ai_assistant.modules.taskbar_detection import can_see_taskbar
         
         result = can_see_taskbar()
         
@@ -3255,7 +3290,7 @@ def api_taskbar_capabilities():
 def api_find_app_in_taskbar():
     """Find a specific application in taskbar"""
     try:
-        from modules.taskbar_detection import TaskbarDetector
+        from ai_assistant.modules.taskbar_detection import TaskbarDetector
         
         data = request.get_json()
         app_name = data.get('app_name')
@@ -3281,7 +3316,7 @@ def api_find_app_in_taskbar():
 def api_get_running_apps():
     """Get list of running applications"""
     try:
-        from modules.taskbar_detection import TaskbarDetector
+        from ai_assistant.modules.taskbar_detection import TaskbarDetector
         
         detector = TaskbarDetector()
         result = detector.get_running_applications()

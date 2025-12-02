@@ -6,7 +6,25 @@ Provides enhanced wake word detection, continuous listening, voice training, and
 import threading
 import time
 import numpy as np
-import speech_recognition as sr
+
+try:
+    import speech_recognition as sr
+    SPEECH_RECOGNITION_AVAILABLE = True
+except ImportError:
+    SPEECH_RECOGNITION_AVAILABLE = False
+    # Create a dummy sr module for type hints
+    class sr:
+        class AudioSource:
+            pass
+        class Microphone:
+            pass
+        class AudioData:
+            pass
+        class UnknownValueError:
+            pass
+        class RequestError:
+            pass
+
 from collections import deque, defaultdict
 import pickle
 import os

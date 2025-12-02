@@ -3,6 +3,8 @@ PIN Authentication System for YourDaddy AI Assistant
 
 This module handles PIN-based authentication for the AI Assistant,
 replacing traditional login pages with a simple PIN prompt at startup.
+
+Now includes comprehensive audit logging for security events.
 """
 
 import os
@@ -19,69 +21,64 @@ try:
     logger = get_logger(__name__)
 except ImportError:
     import logging
-    logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
+
+# Import audit logging
+try:
+    from core.audit_logger import audit_auth_success, audit_auth_failure, audit_security_event, SeverityLevel
+    AUDIT_AVAILABLE = True
+except ImportError:
+    AUDIT_AVAILABLE = False
+    logger.warning("Audit logging not available for PIN authentication")
 
 
 class PINAuth:
-    """Handle PIN-based authentication for the AI Assistant"""
+    """PIN-based authentication system"""
     
-    def __init__(self, config_file: str = "config/app_integration.env"):
-        """
-        Initialize PIN authentication system
-        
-        Args:
-            config_file: Path to configuration file containing PIN hash
-        """
-        self.config_file = Path(config_file)
-        self.user_settings_file = Path("config/user_settings.json")
+    def __init__(self):
+        """Initialize PIN authentication"""
+        self.config_file = Path(__file__).parent.parent / 'config' / 'app_integration.env'
+        self.user_settings_file = Path(__file__).parent.parent / 'config' / 'user_settings.json'
         self.pin_hash = None
         self.salt = None
-        self._load_pin_config()
-    
-    def _load_pin_config(self) -> None:
-        """Load PIN configuration from environment file"""
-        try:
-            # Check if PIN is configured in environment file
-            if self.config_file.exists():
-                with open(self.config_file, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                    
-                # Extract PIN hash and salt from env file
-                for line in content.split('\n'):
-                    if line.startswith('PIN_HASH='):
-                        self.pin_hash = line.split('=', 1)[1].strip()
-                    elif line.startswith('PIN_SALT='):
-                        self.salt = line.split('=', 1)[1].strip()
+        
+        # Load PIN hash and salt from config file
+        if self.config_file.exists():
+            with open(self.config_file, 'r', encoding='utf-8') as f:
+                content = f.read()
             
-            # Fallback to user settings file
-            if not self.pin_hash and self.user_settings_file.exists():
-                try:
-                    with open(self.user_settings_file, 'r', encoding='utf-8') as f:
-                        settings = json.load(f)
-                        
-                    # Look for PIN in security settings
-                    for setting_group in settings.get('settings', []):
-                        if setting_group.get('title') == 'Security & Privacy':
-                            pin_config = setting_group.get('pin_config', {})
-                            self.pin_hash = pin_config.get('pin_hash')
-                            self.salt = pin_config.get('salt')
-                            break
-                            
-                except (json.JSONDecodeError, KeyError) as e:
-                    logger.warning(f"Could not read PIN from user settings: {e}")
-                    
-        except Exception as e:
-            logger.error(f"Error loading PIN configuration: {e}")
+            # Extract PIN hash and salt from env file
+            for line in content.split('\n'):
+                if line.startswith('PIN_HASH='):
+                    self.pin_hash = line.split('=', 1)[1].strip()
+                elif line.startswith('PIN_SALT='):
+                    self.salt = line.split('=', 1)[1].strip()
+        
+        # Fallback to user settings file if not found in env
+        if not self.pin_hash and self.user_settings_file.exists():
+            try:
+                with open(self.user_settings_file, 'r', encoding='utf-8') as f:
+                    settings = json.load(f)
+                
+                # Look for PIN in security settings
+                for setting_group in settings.get('settings', []):
+                    if setting_group.get('title') == 'Security & Privacy':
+                        for setting in setting_group.get('settings', []):
+                            if setting.get('name') == 'PIN Authentication':
+                                self.pin_hash = setting.get('pin_hash')
+                                self.salt = setting.get('pin_salt')
+                                break
+            except Exception as e:
+                logger.warning(f"Could not load PIN from user settings: {e}")
     
     def _hash_pin(self, pin: str, salt: Optional[str] = None) -> Tuple[str, str]:
         """
-        Hash a PIN with salt for secure storage
+        Hash a PIN using PBKDF2
         
         Args:
             pin: The PIN to hash
             salt: Optional salt (generates new one if not provided)
-            
+        
         Returns:
             Tuple of (hashed_pin, salt)
         """
@@ -102,13 +99,78 @@ class PINAuth:
         """Check if a PIN is already configured"""
         return self.pin_hash is not None and self.salt is not None
     
+    def verify_pin(self, pin: str) -> bool:
+        """
+        Verify a PIN against the stored hash
+        
+        Args:
+            pin: The PIN to verify
+        
+        Returns:
+            True if PIN is correct, False otherwise
+        """
+        if not self.is_pin_configured():
+            logger.warning("No PIN configured for verification")
+            return False
+        
+        try:
+            hashed_pin, _ = self._hash_pin(pin, self.salt)
+            return hashed_pin == self.pin_hash
+        except Exception as e:
+            logger.error(f"Error verifying PIN: {e}")
+            return False
+    
+    def prompt_for_pin(self, max_attempts: int = 3) -> bool:
+        """
+        Prompt user for PIN and verify
+        
+        Args:
+            max_attempts: Maximum number of attempts allowed
+        
+        Returns:
+            True if authentication successful, False otherwise
+        """
+        if not self.is_pin_configured():
+            print("⚠️  PIN authentication not configured")
+            print("Run 'python main.py --setup-pin' to configure PIN")
+            return False
+        
+        for attempt in range(max_attempts):
+            try:
+                pin = getpass.getpass("🔐 Enter PIN: ")
+                
+                if self.verify_pin(pin):
+                    logger.info("PIN authentication successful")
+                    if AUDIT_AVAILABLE:
+                        audit_auth_success("PIN authentication")
+                    return True
+                else:
+                    remaining = max_attempts - attempt - 1
+                    if remaining > 0:
+                        print(f"❌ Invalid PIN. {remaining} attempts remaining.")
+                    else:
+                        print("❌ Invalid PIN. Access denied.")
+                    
+                    if AUDIT_AVAILABLE:
+                        audit_auth_failure("PIN authentication", "Invalid PIN")
+                    
+            except KeyboardInterrupt:
+                print("\n❌ PIN authentication cancelled")
+                return False
+            except Exception as e:
+                logger.error(f"Error during PIN prompt: {e}")
+                print(f"❌ Error: {e}")
+                return False
+        
+        return False
+    
     def setup_pin(self, pin: str) -> bool:
         """
         Set up a new PIN for the assistant
         
         Args:
             pin: The PIN to configure
-            
+        
         Returns:
             True if PIN was successfully configured, False otherwise
         """
@@ -116,10 +178,14 @@ class PINAuth:
             # Validate PIN
             if len(pin) < 4:
                 print("❌ PIN must be at least 4 digits long")
+                if AUDIT_AVAILABLE:
+                    audit_auth_failure("setup", "PIN too short during setup")
                 return False
-                
+            
             if not pin.isdigit():
                 print("❌ PIN must contain only numbers")
+                if AUDIT_AVAILABLE:
+                    audit_auth_failure("setup", "Invalid PIN format during setup")
                 return False
             
             # Hash the PIN
@@ -134,11 +200,26 @@ class PINAuth:
             
             logger.info("PIN configured successfully")
             print("✅ PIN configured successfully!")
+            
+            # Audit successful PIN setup
+            if AUDIT_AVAILABLE:
+                audit_security_event(
+                    "PIN authentication configured successfully",
+                    SeverityLevel.INFO
+                )
+            
             return True
             
         except Exception as e:
             logger.error(f"Error setting up PIN: {e}")
             print(f"❌ Error setting up PIN: {e}")
+            
+            if AUDIT_AVAILABLE:
+                audit_security_event(
+                    f"PIN setup failed: {str(e)}",
+                    SeverityLevel.HIGH
+                )
+            
             return False
     
     def _save_pin_to_env(self, hashed_pin: str, salt: str) -> None:
@@ -169,112 +250,37 @@ class PINAuth:
                     ""
                 ])
             
-            # Add PIN configuration
-            lines.extend([
-                f"PIN_HASH={hashed_pin}",
-                f"PIN_SALT={salt}"
-            ])
+            # Add new PIN entries
+            lines.append(f"PIN_HASH={hashed_pin}")
+            lines.append(f"PIN_SALT={salt}")
             
             # Write back to file
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 f.write('\n'.join(lines))
-                
+            
+            logger.info(f"PIN saved to {self.config_file}")
+            
         except Exception as e:
-            logger.error(f"Error saving PIN to environment file: {e}")
+            logger.error(f"Error saving PIN to env file: {e}")
             raise
-    
-    def verify_pin(self, pin: str) -> bool:
-        """
-        Verify a PIN against the stored hash
-        
-        Args:
-            pin: The PIN to verify
-            
-        Returns:
-            True if PIN is correct, False otherwise
-        """
-        try:
-            if not self.is_pin_configured():
-                logger.warning("No PIN configured")
-                return False
-            
-            # Hash the provided PIN with stored salt
-            hashed_input, _ = self._hash_pin(pin, self.salt)
-            
-            # Compare hashes
-            is_valid = hashed_input == self.pin_hash
-            
-            # Log authentication attempt
-            if is_valid:
-                logger.info("Successful PIN authentication")
-            else:
-                logger.warning("Failed PIN authentication attempt")
-                
-            return is_valid
-            
-        except Exception as e:
-            logger.error(f"Error verifying PIN: {e}")
-            return False
-    
-    def prompt_for_pin(self, max_attempts: int = 3) -> bool:
-        """
-        Prompt user for PIN with limited attempts
-        
-        Args:
-            max_attempts: Maximum number of authentication attempts
-            
-        Returns:
-            True if authentication successful, False otherwise
-        """
-        print("\n🔐 AI Assistant PIN Authentication")
-        print("=" * 40)
-        
-        if not self.is_pin_configured():
-            print("⚠️  No PIN configured. Setting up PIN authentication...")
-            return self._setup_new_pin()
-        
-        for attempt in range(max_attempts):
-            try:
-                # Get PIN input (hidden)
-                pin = getpass.getpass(f"Enter PIN ({attempt + 1}/{max_attempts}): ")
-                
-                if self.verify_pin(pin):
-                    print("✅ Authentication successful!")
-                    return True
-                else:
-                    remaining = max_attempts - attempt - 1
-                    if remaining > 0:
-                        print(f"❌ Invalid PIN. {remaining} attempts remaining.")
-                    else:
-                        print("❌ Maximum attempts exceeded. Access denied.")
-                        
-            except KeyboardInterrupt:
-                print("\n❌ Authentication cancelled by user")
-                return False
-            except Exception as e:
-                logger.error(f"Error during PIN prompt: {e}")
-                print(f"❌ Authentication error: {e}")
-                
-        return False
     
     def _setup_new_pin(self) -> bool:
         """Set up a new PIN interactively"""
-        try:
-            print("\n📝 PIN Setup")
-            print("-" * 20)
-            print("PIN Requirements:")
-            print("• At least 4 digits")
-            print("• Numbers only")
-            print("• Easy to remember but not obvious")
-            print()
-            
-            while True:
+        print("-" * 20)
+        print("PIN Requirements:")
+        print("• At least 4 digits")
+        print("• Numbers only")
+        print("• Easy to remember but not obvious")
+        print()
+        
+        while True:
+            try:
                 pin1 = getpass.getpass("Enter new PIN: ")
                 
                 if len(pin1) < 4:
                     print("❌ PIN must be at least 4 digits long")
                     continue
-                    
+                
                 if not pin1.isdigit():
                     print("❌ PIN must contain only numbers")
                     continue
@@ -292,13 +298,13 @@ class PINAuth:
                 else:
                     print("❌ Failed to setup PIN. Please try again.")
                     
-        except KeyboardInterrupt:
-            print("\n❌ PIN setup cancelled")
-            return False
-        except Exception as e:
-            logger.error(f"Error during PIN setup: {e}")
-            print(f"❌ PIN setup error: {e}")
-            return False
+            except KeyboardInterrupt:
+                print("\n❌ PIN setup cancelled")
+                return False
+            except Exception as e:
+                logger.error(f"Error during PIN setup: {e}")
+                print(f"❌ PIN setup error: {e}")
+                return False
     
     def change_pin(self) -> bool:
         """Change the current PIN"""
@@ -310,6 +316,8 @@ class PINAuth:
             current_pin = getpass.getpass("Enter current PIN: ")
             if not self.verify_pin(current_pin):
                 print("❌ Current PIN is incorrect")
+                if AUDIT_AVAILABLE:
+                    audit_auth_failure("change_pin", "Invalid current PIN")
                 return False
         
         # Set up new PIN
@@ -336,7 +344,6 @@ def require_pin_auth(skip_auth_arg='--skip-auth'):
         require_pin_auth()
         main()
     """
-    import sys
     import argparse
     
     # Check for skip auth argument

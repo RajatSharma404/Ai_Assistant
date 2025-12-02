@@ -9,7 +9,7 @@ import os
 import json
 import time
 import logging
-from typing import Dict, List, Optional, Generator, Any, Callable
+from typing import Dict, List, Optional, Generator, Any, Callable, Union
 from abc import ABC, abstractmethod
 from datetime import datetime
 import re
@@ -482,7 +482,7 @@ class UnifiedChatInterface:
         """Add assistant message."""
         self.conversation_history.append({"role": "assistant", "content": content})
     
-    def chat(self, user_message: str, stream: bool = False, **kwargs) -> str | Generator[str, None, None]:
+    def chat(self, user_message: str, stream: bool = False, **kwargs) -> Union[str, Generator[str, None, None]]:
         """Send a chat message and get response."""
         self.add_user_message(user_message)
         

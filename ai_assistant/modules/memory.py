@@ -2,6 +2,8 @@
 """
 Enhanced memory system with semantic search, conversation summaries,
 and knowledge management for the YourDaddy AI Assistant.
+
+Now includes encryption for sensitive conversation data.
 """
 
 import sqlite3
@@ -11,6 +13,22 @@ import json
 from typing import List, Dict, Optional, Tuple
 from contextlib import contextmanager
 import threading
+from pathlib import Path
+
+# Import encryption support
+try:
+    from core.encrypted_database import create_encrypted_memory_db
+    ENCRYPTION_AVAILABLE = True
+except ImportError:
+    ENCRYPTION_AVAILABLE = False
+    print("⚠️ Encryption not available - sensitive data will not be encrypted")
+
+# Import database configuration
+try:
+    from database_config import get_db_path_str
+    DB_PATH = get_db_path_str('memory')
+except ImportError:
+    DB_PATH = 'memory.db'
 
 # Connection pool for SQLite
 class ConnectionPool:
@@ -43,8 +61,16 @@ class ConnectionPool:
                 conn.close()
             self._connections.clear()
 
-# Global connection pool
-_memory_pool = ConnectionPool('memory.db', max_connections=5)
+# Global connection pool and encrypted database
+_memory_pool = ConnectionPool(DB_PATH, max_connections=5)
+_encrypted_db = None
+
+def get_encrypted_db():
+    """Get encrypted database instance"""
+    global _encrypted_db
+    if _encrypted_db is None and ENCRYPTION_AVAILABLE:
+        _encrypted_db = create_encrypted_memory_db(DB_PATH)
+    return _encrypted_db
 
 @contextmanager
 def get_db_connection():
@@ -144,33 +170,67 @@ def setup_memory() -> str:
         return f"Error setting up memory: {e}"
 
 def save_to_memory(speaker: str, content: str):
-    """Saves a line of dialogue to both memory tables with transaction safety."""
+    """Saves a line of dialogue to both memory tables with transaction safety and encryption."""
     try:
-        with get_db_transaction() as conn:
-            c = conn.cursor()
-            
-            # Save to original memory table
-            c.execute("INSERT INTO memory (speaker, content) VALUES (?,?)", (speaker, content))
-            
-            # Save to enhanced memory with deduplication
+        # Use encrypted database if available
+        encrypted_db = get_encrypted_db()
+        
+        if encrypted_db:
+            # Save to encrypted database
             content_hash = hashlib.md5(content.encode()).hexdigest()
             importance = determine_importance(content)
             category = categorize_content(content)
             summary = generate_summary(content)
             
-            try:
-                c.execute("""
-                    INSERT INTO enhanced_memory 
-                    (speaker, content, content_hash, importance_level, category, summary)
-                    VALUES (?,?,?,?,?,?)
-                """, (speaker, content, content_hash, importance, category, summary))
-            except sqlite3.IntegrityError:
-                # Content already exists (duplicate), update timestamp instead
-                c.execute("""
-                    UPDATE enhanced_memory 
-                    SET timestamp = CURRENT_TIMESTAMP 
-                    WHERE content_hash = ?
-                """, (content_hash,))
+            # Check for duplicates
+            existing = encrypted_db.select("enhanced_memory", "content_hash = ?", (content_hash,))
+            
+            if existing:
+                # Update timestamp for existing content
+                encrypted_db.update("enhanced_memory", 
+                                  {"timestamp": datetime.datetime.now().isoformat()}, 
+                                  "content_hash = ?", (content_hash,))
+            else:
+                # Insert new content
+                data = {
+                    "speaker": speaker,
+                    "content": content,
+                    "content_hash": content_hash,
+                    "importance_level": importance,
+                    "category": category,
+                    "summary": summary
+                }
+                encrypted_db.insert("enhanced_memory", data)
+                
+                # Also save to basic memory table (unencrypted for backward compatibility)
+                encrypted_db.insert("memory", {"speaker": speaker, "content": content})
+        else:
+            # Fallback to regular database
+            with get_db_transaction() as conn:
+                c = conn.cursor()
+                
+                # Save to original memory table
+                c.execute("INSERT INTO memory (speaker, content) VALUES (?,?)", (speaker, content))
+                
+                # Save to enhanced memory with deduplication
+                content_hash = hashlib.md5(content.encode()).hexdigest()
+                importance = determine_importance(content)
+                category = categorize_content(content)
+                summary = generate_summary(content)
+                
+                try:
+                    c.execute("""
+                        INSERT INTO enhanced_memory 
+                        (speaker, content, content_hash, importance_level, category, summary)
+                        VALUES (?,?,?,?,?,?)
+                    """, (speaker, content, content_hash, importance, category, summary))
+                except sqlite3.IntegrityError:
+                    # Content already exists (duplicate), update timestamp instead
+                    c.execute("""
+                        UPDATE enhanced_memory 
+                        SET timestamp = CURRENT_TIMESTAMP 
+                        WHERE content_hash = ?
+                    """, (content_hash,))
     except Exception as e:
         print(f"Error saving to memory: {e}")
 
@@ -181,16 +241,31 @@ def get_memory(last_n_messages: int = 10) -> str:
     """
     print(f"--- 'Hands' (get_memory) activated. Retrieving last {last_n_messages} messages. ---")
     try:
-        with get_db_connection() as conn:
-            c = conn.cursor()
-            c.execute("SELECT speaker, content FROM memory ORDER BY timestamp DESC LIMIT ?", (last_n_messages,))
-            rows = c.fetchall()
+        encrypted_db = get_encrypted_db()
         
-        if not rows:
-            return "The conversation history is empty."
+        if encrypted_db:
+            # Use encrypted database
+            rows = encrypted_db.select("memory", "", None, last_n_messages)
+            # Sort by timestamp descending
+            rows = sorted(rows, key=lambda x: x.get('timestamp', ''), reverse=True)
             
-        history = "\\n".join([f"{speaker}: {content}" for speaker, content in reversed(rows)])
-        return f"Here is the recent conversation history:\\n{history}"
+            if not rows:
+                return "The conversation history is empty."
+                
+            history = "\n".join([f"{row['speaker']}: {row['content']}" for row in reversed(rows)])
+            return f"Here is the recent conversation history:\n{history}"
+        else:
+            # Fallback to regular database
+            with get_db_connection() as conn:
+                c = conn.cursor()
+                c.execute("SELECT speaker, content FROM memory ORDER BY timestamp DESC LIMIT ?", (last_n_messages,))
+                rows = c.fetchall()
+            
+            if not rows:
+                return "The conversation history is empty."
+                
+            history = "\n".join([f"{speaker}: {content}" for speaker, content in reversed(rows)])
+            return f"Here is the recent conversation history:\n{history}"
     except Exception as e:
         return f"Error retrieving memory: {e}"
 

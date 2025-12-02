@@ -76,31 +76,32 @@ def main():
     
     try:
         if args.interface == "web":
-            # Try multiple possible locations for web backend
+            print(f"Starting web interface on port {args.port}...")
+            # Start the web backend
             try:
-                from ai_assistant.apps import modern_web_backend
-                print(f"Starting web interface on port {args.port}...")
-                # Start web backend
-            except ImportError:
-                try:
-                    import modern_web_backend
-                    print(f"Starting web interface on port {args.port}...")
-                    # Start web backend
-                except ImportError:
-                    print("❌ Web backend not found. Please check your installation.")
-                    sys.exit(1)
+                from ai_assistant.apps.modern_web_backend import app, socketio
+                print("🌐 Starting YourDaddy Assistant Web Backend...")
+                socketio.run(app, host='0.0.0.0', port=args.port, debug=args.verbose)
+            except ImportError as e:
+                print(f"❌ Web backend import failed: {e}")
+                print("Please check your installation and dependencies.")
+                sys.exit(1)
                     
         elif args.interface == "cli":
             # Try multiple possible locations for CLI
             try:
-                from ai_assistant.apps import app
+                from ai_assistant.apps.app import main as cli_main
                 print("Starting CLI interface...")
-                # Start CLI version
+                cli_main()  # Actually call the CLI main function
             except ImportError:
                 try:
                     import app
                     print("Starting CLI interface...")
-                    # Start CLI version
+                    if hasattr(app, 'main'):
+                        app.main()
+                    else:
+                        print("❌ CLI main function not found.")
+                        sys.exit(1)
                 except ImportError:
                     print("❌ CLI interface not found. Please check your installation.")
                     sys.exit(1)
@@ -108,14 +109,18 @@ def main():
         elif args.interface == "desktop":
             # Try multiple possible locations for desktop GUI
             try:
-                from ai_assistant.apps import yourdaddy_app
+                from ai_assistant.apps.yourdaddy_app import main as desktop_main
                 print("Starting desktop interface...")
-                # Start desktop GUI
+                desktop_main()  # Actually call the desktop main function
             except ImportError:
                 try:
                     import yourdaddy_app
                     print("Starting desktop interface...")
-                    # Start desktop GUI
+                    if hasattr(yourdaddy_app, 'main'):
+                        yourdaddy_app.main()
+                    else:
+                        print("❌ Desktop main function not found.")
+                        sys.exit(1)
                 except ImportError:
                     print("❌ Desktop interface not found. Please check your installation.")
                     sys.exit(1)

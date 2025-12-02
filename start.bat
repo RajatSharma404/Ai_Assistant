@@ -4,9 +4,9 @@ setlocal enabledelayedexpansion
 echo ================================================================
 echo    YourDaddy AI Assistant - Secure Launcher (Windows)
 echo ================================================================
-echo 🔐 This launcher includes PIN authentication for security
-echo 💡 Use --skip-auth to bypass PIN for development
-echo ⚙️  Use --setup-pin to configure/change your PIN
+echo 🔐 This launcher includes  authentication for security
+echo 💡 Use --skip-auth to bypass  for development
+echo ⚙️  Use --setup- to configure/change your 
 echo ================================================================
 
 REM Check if Python is installed
@@ -51,7 +51,7 @@ echo   2. backend      - Start unified backend server only
 echo   3. web          - Start web UI (backend + frontend)
 echo   4. test         - Run comprehensive tests
 echo   5. setup        - Run setup and configuration
-echo   6. setup-pin    - Setup or change PIN authentication
+echo   6. setup-    - Setup or change  authentication
 echo   7. debug        - Start in debug mode
 echo.
 set /p choice="Select option (1-7): "
@@ -61,7 +61,7 @@ if "%choice%"=="2" set "TARGET=backend"
 if "%choice%"=="3" set "TARGET=web"
 if "%choice%"=="4" set "TARGET=test"
 if "%choice%"=="5" set "TARGET=setup"
-if "%choice%"=="6" set "TARGET=setup-pin"
+if "%choice%"=="6" set "TARGET=setup-"
 if "%choice%"=="7" set "TARGET=debug"
 
 if "%TARGET%"=="" (
@@ -103,9 +103,9 @@ if "%TARGET%"=="app" (
 ) else if "%TARGET%"=="setup" (
     echo ⚙️ Running setup...
     python scripts/setup/setup.py
-) else if "%TARGET%"=="setup-pin" (
-    echo 🔐 PIN Management...
-    python setup_pin.py
+) else if "%TARGET%"=="setup-" (
+    echo 🔐  Management...
+    python setup_.py
 ) else if "%TARGET%"=="debug" (
     echo 🐛 Starting in debug mode (authentication disabled)...
     python main.py --verbose --interface cli --skip-auth

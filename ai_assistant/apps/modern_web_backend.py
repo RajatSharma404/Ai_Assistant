@@ -28,6 +28,7 @@ import sys
 import time
 import threading
 import json
+import functools
 from datetime import datetime, timedelta
 from pathlib import Path
 import re
@@ -108,6 +109,26 @@ app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', secrets.token_hex(32)
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
 app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
 
+# Import security frameworks
+try:
+    from core.input_validation import InputValidator
+    from core.audit_logger import AuditLogger
+    from core.access_control import AccessControlManager
+    SECURITY_FRAMEWORKS_AVAILABLE = True
+    print("✅ Security frameworks loaded")
+    
+    # Initialize security systems
+    input_validator = InputValidator()
+    audit_logger = AuditLogger()
+    access_control = AccessControlManager()
+    
+except ImportError as e:
+    SECURITY_FRAMEWORKS_AVAILABLE = False
+    print(f"⚠️ Security frameworks not available: {e}")
+    input_validator = None
+    audit_logger = None
+    access_control = None
+
 # Initialize JWT
 jwt = JWTManager(app)
 
@@ -169,6 +190,61 @@ def sanitize_command(command):
     for char in dangerous_chars:
         command = command.replace(char, '')
     return command.strip()[:500]  # Limit length
+
+def secure_endpoint(required_permission=None):
+    """Security decorator for API endpoints"""
+    def decorator(f):
+        @functools.wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                # Input validation
+                if input_validator and request.is_json:
+                    data = request.get_json()
+                    if data:
+                        validation_result = input_validator.validate_api_input(request.path, data)
+                        if not validation_result['is_valid']:
+                            if audit_logger:
+                                audit_logger.log_security_event(
+                                    'input_validation_failed',
+                                    f"Invalid input on {request.path}: {validation_result['errors']}",
+                                    request.remote_addr,
+                                    details={'errors': validation_result['errors']}
+                                )
+                            return jsonify({"error": "Invalid input", "details": validation_result['errors']}), 400
+                
+                # Access control (if permission specified)
+                if access_control and required_permission:
+                    user_id = get_jwt_identity() if hasattr(request, 'headers') and 'Authorization' in request.headers else 'anonymous'
+                    if not access_control.check_permission(user_id, required_permission):
+                        if audit_logger:
+                            audit_logger.log_security_event(
+                                'access_denied',
+                                f"Permission denied for {request.path}",
+                                request.remote_addr,
+                                details={'required_permission': required_permission, 'user_id': user_id}
+                            )
+                        return jsonify({"error": "Access denied"}), 403
+                
+                # Audit logging
+                if audit_logger:
+                    audit_logger.log_event(
+                        'api_access',
+                        f"API access to {request.path}",
+                        request.remote_addr if request.remote_addr else 'unknown'
+                    )
+                
+                return f(*args, **kwargs)
+            except Exception as e:
+                if audit_logger:
+                    audit_logger.log_security_event(
+                        'security_decorator_error',
+                        f"Security decorator error on {request.path}: {str(e)}",
+                        request.remote_addr,
+                        severity='high'
+                    )
+                return jsonify({"error": "Security validation failed"}), 500
+        return decorated_function
+    return decorator
 
 class ModernAssistant:
     """Modern Assistant with real-time capabilities"""
@@ -1377,21 +1453,20 @@ def api_verify_token():
         return jsonify({"error": "Chat processing failed"}), 500
 
 @app.route('/api/command', methods=['POST'])
+@secure_endpoint()
 @limiter.limit("30 per minute")
 def api_command():
-    """Process text command - NO AUTH REQUIRED"""
+    """Process text command with enhanced security"""
     try:
         data = request.get_json()
         
-        # Validate input
-        is_valid, error = validate_input(data, 'command', 'command')
-        if not is_valid:
-            return jsonify({"error": error}), 400
+        if not data or 'command' not in data:
+            return jsonify({"error": "Command is required"}), 400
         
         command = sanitize_command(data['command'])
         
         if not command:
-            return jsonify({"error": "No command provided"}), 400
+            return jsonify({"error": "No valid command provided"}), 400
         
         # Process command with proper error handling
         try:
@@ -2123,15 +2198,30 @@ def handle_disconnect():
 
 @socketio.on('command')
 def handle_command(data):
-    """Handle real-time command"""
+    """Handle real-time command with security validation"""
     try:
+        # Input validation for WebSocket
+        if input_validator:
+            validation_result = input_validator.validate_websocket_message('command', data)
+            if not validation_result['is_valid']:
+                emit('command_response', {
+                    'error': f'Invalid input: {", ".join(validation_result["errors"])}',
+                    'timestamp': datetime.now().isoformat(),
+                    'success': False
+                })
+                return
+        
         command = data.get('command', '')
         message = data.get('message', command)  # Support both 'command' and 'message'
         model = data.get('model')  # Get model preference
         
         if command or message:
             # Use the actual command/message
-            user_input = command or message
+            user_input = sanitize_command(command or message)
+            
+            # Log the interaction
+            if audit_logger:
+                audit_logger.log_event('websocket_command', f"WebSocket command: {user_input[:100]}", request.sid)
             
             # Process command with proper error handling
             response = assistant.process_command(user_input, model_preference=model)
@@ -2157,6 +2247,8 @@ def handle_command(data):
             
     except Exception as e:
         print(f"❌ Command processing error: {str(e)}")
+        if audit_logger:
+            audit_logger.log_security_event('websocket_error', f"WebSocket command error: {str(e)}", request.sid, severity='medium')
         emit('command_response', {
             'error': f'Sorry, I encountered an error: {str(e)}',
             'timestamp': datetime.now().isoformat(),

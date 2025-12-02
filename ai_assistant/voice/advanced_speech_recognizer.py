@@ -23,6 +23,10 @@ try:
     SPEECH_RECOGNITION_AVAILABLE = True
 except ImportError:
     SPEECH_RECOGNITION_AVAILABLE = False
+    # Create a dummy sr module for type hints
+    class sr:
+        class AudioSource:
+            pass
 
 try:
     from vosk import Model, KaldiRecognizer

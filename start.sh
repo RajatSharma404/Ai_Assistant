@@ -3,9 +3,9 @@
 echo "================================================================"
 echo "   YourDaddy AI Assistant - Secure Launcher (Linux/macOS)"
 echo "================================================================"
-echo "🔐 This launcher includes PIN authentication for security"
-echo "💡 Use --skip-auth to bypass PIN for development"
-echo "⚙️  Use --setup-pin to configure/change your PIN"
+echo "🔐 This launcher includes  authentication for security"
+echo "💡 Use --skip-auth to bypass  for development"
+echo "⚙️  Use --setup- to configure/change your "
 echo "================================================================"
 
 # Check if Python is installed
@@ -45,7 +45,7 @@ show_menu() {
     echo "  3. web          - Start web UI (backend + frontend)"
     echo "  4. test         - Run comprehensive tests"
     echo "  5. setup        - Run setup and configuration"
-    echo "  6. setup-pin    - Setup or change PIN authentication"
+    echo "  6. setup-    - Setup or change  authentication"
     echo "  7. debug        - Start in debug mode"
     echo ""
     read -p "Select option (1-7): " choice
@@ -56,7 +56,7 @@ show_menu() {
         3) TARGET="web" ;;
         4) TARGET="test" ;;
         5) TARGET="setup" ;;
-        6) TARGET="setup-pin" ;;
+        6) TARGET="setup-" ;;
         7) TARGET="debug" ;;
         *) echo "Invalid choice. Exiting..."; exit 1 ;;
     esac
@@ -104,7 +104,7 @@ case $TARGET in
             echo "================================================================"
             
             # Wait for user interrupt
-            trap "echo 'Stopping servers...'; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; exit 0" SIGINT
+            trap "echo 'Stopg servers...'; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; exit 0" SIGINT
             wait
         else
             echo "Frontend project not found. Backend only running at http://localhost:5000"
@@ -125,9 +125,9 @@ case $TARGET in
             exit 1
         fi
         ;;
-    "setup-pin")
-        echo "🔐 PIN Management..."
-        $PYTHON_CMD setup_pin.py
+    "setup-")
+        echo "🔐  Management..."
+        $PYTHON_CMD setup_.py
         ;;
     "debug")
         echo "🐛 Starting in debug mode (authentication disabled)..."
@@ -136,11 +136,11 @@ case $TARGET in
     *)
         echo "❌ Unknown target: $TARGET"
         echo ""
-        echo "Usage: $0 [app|backend|web|test|setup|setup-pin|debug] [mode]"
+        echo "Usage: $0 [app|backend|web|test|setup|setup-|debug] [mode]"
         echo "Example: $0 app"
         echo "         $0 backend"
         echo "         $0 web"
-        echo "         $0 setup-pin"
+        echo "         $0 setup-"
         exit 1
         ;;
 esac

@@ -24,14 +24,26 @@ classifiers = [
 requires-python = ">=3.8"
 dependencies = [
     "flask",
-    "flask-cors",
+    "flask-cors", 
+    "flask-jwt-extended",
+    "flask-socketio",
+    "flask-limiter",
     "requests",
     "speech_recognition",
     "pyttsx3",
     "opencv-python",
     "pillow",
     "numpy",
-    "sqlite3",
+    "python-dotenv",
+    "cryptography",
+    "psutil",
+    "google-generativeai",
+    "googletrans==4.0.0rc1",
+    "httpx",
+    "python-dateutil",
+    "werkzeug",
+    "colorama",
+    "pywin32; platform_system=='Windows'",
 ]
 
 [project.optional-dependencies]
@@ -63,7 +75,8 @@ Repository = "https://github.com/yourusername/ai-assistant"
 Issues = "https://github.com/yourusername/ai-assistant/issues"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
+include = ["ai_assistant*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.json", "*.yaml", "*.yml", "*.txt"]

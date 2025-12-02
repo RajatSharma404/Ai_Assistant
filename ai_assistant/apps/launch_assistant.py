@@ -12,11 +12,11 @@ import subprocess
 import platform
 import time
 
-# Add project paths
-project_root = Path(__file__).parent
+# Add project paths - Fix: Use proper repo root instead of apps directory
+project_root = Path(__file__).resolve().parents[2]  # Go up 2 levels: apps -> ai_assistant -> repo_root
 sys.path.insert(0, str(project_root))
-sys.path.insert(0, str(project_root / "modules"))
-sys.path.insert(0, str(project_root / "utils"))
+sys.path.insert(0, str(project_root / "ai_assistant" / "modules"))
+sys.path.insert(0, str(project_root / "ai_assistant" / "utils"))
 
 # Import utilities
 try:

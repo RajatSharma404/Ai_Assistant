@@ -10,6 +10,9 @@ Tests for:
 - extract_key_information()
 - batch_ocr_directory()
 - summarize_document_content()
+
+Note: Tests marked with @pytest.mark.ocr_required require external binaries.
+Run with: pytest -m "not ocr_required" to skip OCR-dependent tests.
 """
 
 import unittest
@@ -18,6 +21,8 @@ import tempfile
 import shutil
 from pathlib import Path
 import sys
+from unittest.mock import patch, MagicMock, mock_open
+import pytest
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -34,9 +39,98 @@ from modules.document_ocr import (
 )
 
 
+class TestOCRMocked(unittest.TestCase):
+    """Mock-based tests that run without external dependencies"""
+    
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+    
+    def tearDown(self):
+        shutil.rmtree(self.test_dir)
+    
+    @pytest.mark.mock_only
+    def test_check_ocr_dependencies_mocked(self):
+        """Test dependency checking with mocked imports"""
+        with patch('importlib.util.find_spec') as mock_find_spec:
+            # Mock all dependencies as available
+            mock_find_spec.return_value = MagicMock()
+            
+            result = check_ocr_dependencies()
+            
+            self.assertIn("OCR Dependencies Status", result)
+    
+    @pytest.mark.mock_only
+    @patch('modules.document_ocr.pytesseract')
+    @patch('modules.document_ocr.Image')
+    def test_extract_text_from_image_mocked(self, mock_image, mock_tesseract):
+        """Test image OCR with mocked pytesseract"""
+        # Setup mocks
+        mock_tesseract.image_to_string.return_value = "Mocked OCR text output"
+        mock_image_obj = MagicMock()
+        mock_image.open.return_value = mock_image_obj
+        
+        # Create a fake image file
+        test_image = os.path.join(self.test_dir, "test.png")
+        with open(test_image, 'wb') as f:
+            f.write(b"fake image data")
+        
+        result = extract_text_from_image(test_image)
+        
+        # Verify mocks were called and result contains expected text
+        mock_image.open.assert_called_once_with(test_image)
+        mock_tesseract.image_to_string.assert_called_once_with(mock_image_obj)
+        self.assertIn("Mocked OCR text output", result)
+    
+    @pytest.mark.mock_only
+    @patch('modules.document_ocr.fitz')  # PyMuPDF
+    def test_extract_text_from_pdf_mocked(self, mock_fitz):
+        """Test PDF text extraction with mocked PyMuPDF"""
+        # Setup mock PDF document
+        mock_doc = MagicMock()
+        mock_page = MagicMock()
+        mock_page.get_text.return_value = "Mocked PDF text content"
+        mock_doc.__iter__ = MagicMock(return_value=iter([mock_page]))
+        mock_doc.page_count = 1
+        mock_fitz.open.return_value = mock_doc
+        
+        # Create a fake PDF file
+        test_pdf = os.path.join(self.test_dir, "test.pdf")
+        with open(test_pdf, 'wb') as f:
+            f.write(b"fake pdf data")
+        
+        result = extract_text_from_pdf(test_pdf)
+        
+        # Verify mocks and result
+        mock_fitz.open.assert_called_once_with(test_pdf)
+        self.assertIn("Mocked PDF text content", result)
+    
+    @pytest.mark.mock_only
+    @patch('modules.document_ocr.cv2')
+    @patch('modules.document_ocr.Image')
+    def test_preprocess_image_mocked(self, mock_image, mock_cv2):
+        """Test image preprocessing with mocked OpenCV"""
+        # Setup mocks
+        mock_image_obj = MagicMock()
+        mock_image.open.return_value = mock_image_obj
+        mock_cv2.imread.return_value = MagicMock()  # Mock image array
+        mock_cv2.cvtColor.return_value = MagicMock()
+        mock_cv2.GaussianBlur.return_value = MagicMock()
+        mock_cv2.threshold.return_value = (None, MagicMock())
+        
+        test_image = os.path.join(self.test_dir, "test.png")
+        with open(test_image, 'wb') as f:
+            f.write(b"fake image data")
+        
+        result = preprocess_image_for_ocr(test_image)
+        
+        # Should complete without error
+        self.assertIsInstance(result, str)
+
+
 class TestOCRDependencies(unittest.TestCase):
     """Test OCR dependencies checking"""
     
+    @pytest.mark.mock_only
     def test_check_ocr_dependencies(self):
         """Test checking which OCR dependencies are available"""
         result = check_ocr_dependencies()
@@ -165,8 +259,12 @@ startxref
             "error" in result.lower()
         )
     
+    @pytest.mark.ocr_required
+    @pytest.mark.external_binary
+    @pytest.mark.ocr_required
+    @pytest.mark.external_binary
     def test_extract_text_from_image_with_test_image(self):
-        """Test OCR on actual test image if possible"""
+        """Test OCR on actual test image (requires Tesseract)"""
         test_image = self.create_simple_text_image()
         
         if test_image is None:
@@ -187,6 +285,8 @@ startxref
         result = extract_text_from_pdf("/nonexistent/file.pdf")
         self.assertIn("not found", result)
     
+    @pytest.mark.ocr_required
+    @pytest.mark.external_binary
     def test_extract_text_from_pdf_dependencies(self):
         """Test that function checks for PDF dependencies"""
         test_pdf = self.create_sample_pdf()
@@ -200,6 +300,8 @@ startxref
             "error" in result.lower()
         )
     
+    @pytest.mark.ocr_required  
+    @pytest.mark.external_binary
     def test_extract_text_from_pdf_with_page_range(self):
         """Test PDF extraction with page range"""
         test_pdf = self.create_sample_pdf()
@@ -247,6 +349,8 @@ startxref
         result = preprocess_image_for_ocr("/nonexistent/image.png")
         self.assertIn("not found", result)
     
+    @pytest.mark.ocr_required
+    @pytest.mark.external_binary
     def test_preprocess_image_dependencies(self):
         """Test that preprocessing checks dependencies"""
         test_image = self.create_simple_text_image()

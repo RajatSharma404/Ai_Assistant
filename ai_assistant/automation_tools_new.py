@@ -123,6 +123,9 @@ from modules.web_scraping import (
     get_product_price
 )
 
+# Import research functions
+from modules.research import research_topic
+
 from datetime import datetime
 import time
 
