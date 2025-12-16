@@ -34,6 +34,13 @@ from pathlib import Path
 import re
 import secrets
 import logging
+
+# Import secure secrets manager
+try:
+    from ai_assistant.core.secrets_manager import get_secrets_manager, SecretsValidationError
+    SECRETS_MANAGER_AVAILABLE = True
+except ImportError:
+    SECRETS_MANAGER_AVAILABLE = False
 # Fix Windows console encoding for emojis
 if sys.platform == 'win32':
     sys.stdout.reconfigure(encoding='utf-8') if hasattr(sys.stdout, 'reconfigure') else None
@@ -52,6 +59,11 @@ logger.info("="*80)
 logger.info("YourDaddy Assistant - Web Backend Starting")
 logger.info("="*80)
 
+# Add ai_assistant directory to sys.path to allow importing automation_tools_new and modules
+current_dir = os.path.dirname(os.path.abspath(__file__))
+ai_assistant_dir = os.path.dirname(current_dir)
+if ai_assistant_dir not in sys.path:
+    sys.path.append(ai_assistant_dir)
 
 # Import automation tools
 try:
@@ -147,9 +159,20 @@ load_dotenv()
 # Create Flask app
 app = Flask(__name__)
 
-# Security Configuration
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', secrets.token_hex(32))
-app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', secrets.token_hex(32))
+# Security Configuration - Use secrets manager for secure key handling
+if SECRETS_MANAGER_AVAILABLE:
+    try:
+        secrets_mgr = get_secrets_manager()
+        app.config['SECRET_KEY'] = secrets_mgr.get_or_generate('SECRET_KEY', 32)
+        app.config['JWT_SECRET_KEY'] = secrets_mgr.get_or_generate('JWT_SECRET_KEY', 32)
+    except Exception as e:
+        logger.warning(f"Secrets manager error: {e}. Using generated keys.")
+        app.config['SECRET_KEY'] = secrets.token_hex(32)
+        app.config['JWT_SECRET_KEY'] = secrets.token_hex(32)
+else:
+    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY') or secrets.token_hex(32)
+    app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY') or secrets.token_hex(32)
+
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
 app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
 
@@ -184,12 +207,25 @@ socketio = SocketIO(
 )
 
 # User Management (Simple in-memory store - replace with database in production)
+# WARNING: Admin password MUST be set via environment variable for security
+_admin_password = os.getenv('ADMIN_PASSWORD')
+if not _admin_password:
+    logger.warning(
+        "⚠️  ADMIN_PASSWORD not set! Using temporary generated password. "
+        "Set ADMIN_PASSWORD in your environment for production use."
+    )
+    _admin_password = secrets.token_urlsafe(16)
+    logger.info(f"Temporary admin password: {_admin_password}")
+
 USERS_DB = {
     "admin": {
-        "password_hash": generate_password_hash(os.getenv('ADMIN_PASSWORD', 'changeme123')),
+        "password_hash": generate_password_hash(_admin_password),
         "role": "admin"
     }
 }
+
+# Clear the password from memory
+del _admin_password
 
 # Input Validation Patterns
 VALIDATION_PATTERNS = {
@@ -302,7 +338,7 @@ class ModernAssistant:
             self.llm_chat = UnifiedChatInterface(
                 provider=provider,
                 model=model,
-                use_fallback=True  # Enable automatic fallback
+                use_fallback=False  # Disable automatic fallback
             )
             
             # Store config for reference
@@ -312,10 +348,7 @@ class ModernAssistant:
             test_response = self.llm_chat.chat("Hello", stream=False)
             if "Error" not in test_response:
                 print(f"âœ… Smart LLM initialized successfully with {provider}")
-                if provider == "ollama":
-                    print(f"ðŸ  Using your local {model} model")
-                elif provider in ["openai", "gemini"]:
-                    print(f"ðŸŒ Using online {provider} API")
+                print(f"✅ Using online {provider} API ({model})")
             else:
                 print(f"âš ï¸ LLM test failed: {test_response}")
                 

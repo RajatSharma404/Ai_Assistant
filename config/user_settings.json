@@ -62,7 +62,7 @@
         },
         {
           "name": "High Contrast",
-          "enabled": false,
+          "enabled": true,
           "description": "Increase contrast for accessibility"
         },
         {
@@ -130,7 +130,7 @@
         },
         {
           "name": "Auto Optimization",
-          "enabled": false,
+          "enabled": true,
           "description": "Automatically optimize system resources"
         }
       ]
@@ -154,7 +154,7 @@
         },
         {
           "name": "Smart Home",
-          "enabled": false,
+          "enabled": true,
           "description": "Connect to smart home devices"
         }
       ]

@@ -16,7 +16,12 @@ Features:
 import json
 import time
 import threading
-import schedule
+try:
+    import schedule
+    SCHEDULE_AVAILABLE = True
+except ImportError:
+    SCHEDULE_AVAILABLE = False
+    print("Warning: schedule library not available. Scheduled automation disabled.")
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Callable, Tuple
 from dataclasses import dataclass, asdict, field

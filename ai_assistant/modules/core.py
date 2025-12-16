@@ -4,7 +4,13 @@ Basic Windows automation, file operations, and system control functions.
 This module handles the fundamental "hands" operations of the assistant.
 """
 
-from pywinauto.application import Application
+try:
+    from pywinauto.application import Application
+    PYWINAUTO_AVAILABLE = True
+except ImportError:
+    PYWINAUTO_AVAILABLE = False
+    print("⚠️ pywinauto not found. Window automation features will be disabled.")
+
 import time
 import os 
 import pyttsx3
@@ -18,9 +24,14 @@ from typing import Optional
 from .app_discovery import smart_open_application, discover_applications, refresh_app_database, list_installed_apps
 
 # --- Imports for Volume Control ---
-from ctypes import cast, POINTER
-from comtypes import CLSCTX_ALL
-from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+try:
+    from ctypes import cast, POINTER
+    from comtypes import CLSCTX_ALL
+    from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+    VOLUME_CONTROL_AVAILABLE = True
+except ImportError:
+    VOLUME_CONTROL_AVAILABLE = False
+    print("⚠️ pycaw/comtypes not found. Volume control features will be disabled.")
 
 # --- Imports for PDF Generation ---
 try:
@@ -70,7 +81,10 @@ def extract_number(text: str) -> Optional[int]:
 
 def write_a_note(message: str) -> str:
     """Opens Notepad, types a message, and closes it without saving."""
-    print(f"\\n--- 'Hands' (write_a_note) activated. Message: {message} ---")
+    if not PYWINAUTO_AVAILABLE:
+        return "❌ Note taking requires 'pywinauto' package. Please install it."
+        
+    print(f"\n--- 'Hands' (write_a_note) activated. Message: {message} ---")
     try:
         app = Application(backend="uia").start("notepad.exe")
         main_window = app.window(title="Untitled - Notepad")
@@ -151,6 +165,14 @@ def search_youtube(query: str) -> str:
 
 def close_application(app_name: str) -> str:
     """Closes an open application by its window name."""
+    if not PYWINAUTO_AVAILABLE:
+        # Fallback to taskkill if pywinauto is not available
+        try:
+            subprocess.run(f"taskkill /IM {app_name}.exe /F", shell=True)
+            return f"Attempted to close {app_name} using taskkill."
+        except Exception as e:
+            return f"❌ App closing requires 'pywinauto' package or failed with taskkill: {e}"
+
     print(f"--- 'Hands' (close_application) activated. App: {app_name} ---")
     try:
         app = Application(backend="uia").connect(title_re=f".*{app_name}.*", timeout=5)
@@ -174,6 +196,9 @@ def speak(text_to_speak: str) -> str:
 
 def set_system_volume(level: int) -> str:
     """Sets the system's master volume to a specific level (0-100)."""
+    if not VOLUME_CONTROL_AVAILABLE:
+        return "❌ Volume control requires 'pycaw' package. Please install it."
+
     print(f"--- 'Hands' (set_system_volume) activated. Level: {level} ---")
     try:
         if not (0 <= level <= 100):
@@ -193,6 +218,9 @@ def set_system_volume(level: int) -> str:
 
 def get_system_volume() -> str:
     """Gets the current system volume level (0-100)."""
+    if not VOLUME_CONTROL_AVAILABLE:
+        return "❌ Volume control requires 'pycaw' package."
+
     print("--- 'Hands' (get_system_volume) activated ---")
     try:
         devices = AudioUtilities.GetSpeakers()
@@ -213,6 +241,9 @@ def get_system_volume() -> str:
 
 def volume_up(increment: int = 10) -> str:
     """Increases system volume by specified increment."""
+    if not VOLUME_CONTROL_AVAILABLE:
+        return "❌ Volume control requires 'pycaw' package."
+
     print(f"--- 'Hands' (volume_up) activated. Increment: {increment} ---")
     try:
         devices = AudioUtilities.GetSpeakers()
@@ -232,6 +263,9 @@ def volume_up(increment: int = 10) -> str:
 
 def volume_down(decrement: int = 10) -> str:
     """Decreases system volume by specified decrement."""
+    if not VOLUME_CONTROL_AVAILABLE:
+        return "❌ Volume control requires 'pycaw' package."
+
     print(f"--- 'Hands' (volume_down) activated. Decrement: {decrement} ---")
     try:
         devices = AudioUtilities.GetSpeakers()

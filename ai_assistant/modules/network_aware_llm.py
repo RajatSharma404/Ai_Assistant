@@ -1,29 +1,59 @@
 """
-Smart Network-Aware LLM Configuration
-Automatically uses GPT/Gemini when online, falls back to local models when offline.
+Online LLM Configuration
+Uses cloud-based LLM providers (OpenAI GPT and Google Gemini).
+Optimized for always-online operation.
 """
 
 import os
 import json
 import requests
 import logging
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, List
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
-class NetworkAwareLLMConfig:
-    """Smart configuration that adapts based on network connectivity."""
+
+class OnlineLLMConfig:
+    """Configuration for online-only LLM providers."""
     
     def __init__(self):
         self.last_check = None
-            key_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "api_keys.json")
+        self.network_status = True  # Assume online
+        self.check_interval = timedelta(minutes=5)
+        self.api_keys = self._load_api_keys()
+        
+        # Get keys from json or env (secure loading)
+        openai_key = self.api_keys.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+        gemini_key = self.api_keys.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
+        
+        # Online providers only - ordered by preference
+        self.online_providers = [
+            ("gemini", "gemini-1.5-pro", gemini_key),
+            ("gemini", "gemini-1.5-flash", gemini_key),
+            ("openai", "gpt-4o", openai_key),
+            ("openai", "gpt-4", openai_key),
+            ("openai", "gpt-3.5-turbo", openai_key),
+        ]
+
+    def _load_api_keys(self) -> Dict[str, str]:
+        """Load API keys from secure locations."""
+        keys = {}
+        
+        # Try loading from api_keys.json (should be gitignored)
+        try:
+            key_file = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 
+                "api_keys.json"
+            )
             if os.path.exists(key_file):
                 with open(key_file, 'r') as f:
-                    return json.load(f)
+                    keys = json.load(f)
+                logger.debug("Loaded API keys from api_keys.json")
         except Exception as e:
-            logger.warning(f"Failed to load api_keys.json: {e}")
-        return {}
+            logger.debug(f"No api_keys.json found: {e}")
+        
+        return keys
 
     def check_internet_connectivity(self) -> bool:
         """Check if internet connection is available."""
@@ -35,74 +65,37 @@ class NetworkAwareLLMConfig:
             return self.network_status
         
         try:
-            # Test multiple endpoints for reliability
-            test_urls = [
-                "https://api.openai.com/v1/models",
-                "https://generativelanguage.googleapis.com/v1beta/models",
-                "https://httpbin.org/status/200",
-                "https://google.com"
-            ]
-            
-            for url in test_urls:
-                try:
-                    response = requests.get(url, timeout=3)
-                    if response.status_code == 200:
-                        self.network_status = True
-                        self.last_check = now
-                        logger.info("✅ Internet connectivity confirmed")
-                        return True
-                except:
-                    continue
-            
-            # All tests failed
-            self.network_status = False
+            response = requests.get("https://google.com", timeout=3)
+            self.network_status = response.status_code == 200
             self.last_check = now
-            logger.warning("❌ No internet connectivity detected")
-            return False
-            
+            return self.network_status
         except Exception as e:
-            logger.error(f"Network check failed: {e}")
+            logger.warning(f"Network check failed: {e}")
             self.network_status = False
             self.last_check = now
             return False
     
     def get_optimal_provider(self) -> Tuple[str, str]:
         """
-        Get the optimal provider based on network status and availability.
-        Prioritizes your powerful local models when they're available!
+        Get the optimal online provider based on availability.
         
         Returns:
             Tuple of (provider_name, model_name)
         """
-        # First, always check if your powerful local models are available
-        for provider, model, available in self.local_providers:
-            if available and self._test_ollama_model(model):
-                logger.info(f"🏠 Using your powerful local model: {model}")
-                return (provider, model)
+        # Try online providers in order of preference
+        for provider, model, api_key in self.online_providers:
+            if api_key:
+                try:
+                    if self._test_provider(provider, api_key):
+                        logger.info(f"Using online provider: {provider} ({model})")
+                        return (provider, model)
+                except Exception as e:
+                    logger.warning(f"Provider {provider} test failed: {e}")
+                    continue
         
-        # Check network connectivity for online fallback
-        is_online = self.check_internet_connectivity()
-        
-        if is_online:
-            # Try online providers as backup
-            for provider, model, api_key in self.online_providers:
-                if api_key:  # Only use if API key is available
-                    try:
-                        # Quick test of the provider
-                        if self._test_provider(provider, api_key):
-                            logger.info(f"🌐 Using online provider: {provider} ({model})")
-                            return (provider, model)
-                    except Exception as e:
-                        logger.warning(f"Provider {provider} test failed: {e}")
-                        continue
-            
-            logger.warning("Online providers failed, no local models available")
-        else:
-            logger.info("No internet connection and no local models available")
-        
-        # Final fallback
-        logger.error("No providers available, using basic offline mode")
-        return ("offline", "offline")
+        # No providers available
+        logger.error("No online providers available - check API keys")
+        return ("none", "none")
     
     def _test_provider(self, provider: str, api_key: str) -> bool:
         """Quick test of online provider availability."""
@@ -127,18 +120,6 @@ class NetworkAwareLLMConfig:
         except Exception:
             return False
     
-    def _test_ollama_model(self, model: str) -> bool:
-        """Test if Ollama model is available."""
-        try:
-            response = requests.get("http://localhost:11434/api/tags", timeout=2)
-            if response.status_code == 200:
-                models = response.json().get("models", [])
-                model_names = [m.get("name", "") for m in models]
-                return any(model in name for name in model_names)
-            return False
-        except Exception:
-            return False
-    
     def get_provider_config(self) -> Dict:
         """Get complete provider configuration."""
         provider, model = self.get_optimal_provider()
@@ -146,8 +127,7 @@ class NetworkAwareLLMConfig:
         config = {
             "provider": provider,
             "model": model,
-            "fallback_enabled": True,
-            "network_aware": True,
+            "online_only": True,
             "last_check": self.last_check.isoformat() if self.last_check else None,
             "network_status": self.network_status
         }
@@ -165,28 +145,21 @@ class NetworkAwareLLMConfig:
                 "max_tokens": 4000,
                 "safety_settings": "BLOCK_MEDIUM_AND_ABOVE"
             })
-        elif provider == "ollama":
-            config.update({
-                "temperature": 0.7,
-                "max_tokens": 4000,
-                "context_length": 8192 if "27b" in model else 4096
-            })
         
         return config
 
+
+# Backward compatibility alias
+NetworkAwareLLMConfig = OnlineLLMConfig
+
 # Global instance
-network_config = NetworkAwareLLMConfig()
+network_config = OnlineLLMConfig()
 
 def get_optimal_llm_config():
-    """Get the optimal LLM configuration based on current network status."""
+    """Get the optimal LLM configuration."""
     return network_config.get_provider_config()
 
-def force_local_mode():
-    """Force use of local models regardless of network status."""
-    network_config.network_status = False
-    return network_config.get_optimal_provider()
-
 def force_online_mode():
-    """Force use of online models (will fail if no internet)."""
+    """Force refresh of online providers."""
     network_config.network_status = True
     return network_config.get_optimal_provider()

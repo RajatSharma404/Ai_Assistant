@@ -1,4 +1,6 @@
-# Memory Management Module
+"""Fix memory.py to be a clean re-export module"""
+
+content = '''# Memory Management Module
 """
 Re-export from canonical location to avoid code duplication.
 The actual implementation is in ai_assistant.modules.memory
@@ -36,3 +38,12 @@ __all__ = [
     'categorize_content',
     'generate_summary',
 ]
+'''
+
+file_path = 'f:/bn/assitant/ai_assistant/ai/memory.py'
+
+with open(file_path, 'w', encoding='utf-8') as f:
+    f.write(content)
+
+print(f"✅ Fixed {file_path}")
+print(f"   File size: {len(content)} bytes")

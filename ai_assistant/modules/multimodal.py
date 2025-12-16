@@ -18,7 +18,15 @@ import os
 import json
 import time
 from typing import Optional, Dict, List, Tuple, Any
-from PIL import Image, ImageGrab, ImageDraw, ImageFont
+try:
+    from PIL import Image, ImageGrab, ImageDraw, ImageFont
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+    print("Warning: PIL not available. Multimodal features will be disabled.")
+    # Create dummy Image class for type hinting
+    class Image:
+        class Image: pass
 import google.generativeai as genai
 from datetime import datetime
 import threading

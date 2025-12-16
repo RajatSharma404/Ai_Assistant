@@ -126,6 +126,12 @@ from modules.web_scraping import (
 # Import research functions
 from modules.research import research_topic
 
+# Import WhatsApp functions
+from modules.whatsapp import send_whatsapp_message
+
+# Import complex workflows
+from modules.complex_workflows import process_file_workflow
+
 from datetime import datetime
 import time
 

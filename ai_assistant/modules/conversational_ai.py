@@ -21,6 +21,7 @@ import os
 import re
 import webbrowser
 import subprocess
+from ai_assistant.modules.youtube_ops import youtube_downloader
 
 class ConversationState(Enum):
     """Conversation state enumeration."""
@@ -474,39 +475,47 @@ class AdvancedConversationalAI:
     def _try_execute_command(self, query: str, query_lower: str):
         """Try to execute actionable commands and return result."""
         try:
+            # Clean query to remove emojis and extra symbols for better matching
+            # This handles cases like "🚀 Open Chrome" -> "open chrome"
+            clean_query = re.sub(r'[^\w\s\d\.\-\?\!]', '', query_lower).strip()
+            
             # PRIORITY 1: System/Settings commands (more specific than generic open)
-            if 'settings' in query_lower or 'control panel' in query_lower or \
-               any(word in query_lower for word in ['wifi', 'bluetooth', 'display', 'network', 'sound']) and 'open' in query_lower:
-                return self._execute_settings_command(query, query_lower)
+            if 'settings' in clean_query or 'control panel' in clean_query or \
+               any(word in clean_query for word in ['wifi', 'bluetooth', 'display', 'network', 'sound']) and 'open' in clean_query:
+                return self._execute_settings_command(query, clean_query)
             
             # PRIORITY 2: Opening apps/websites - Most common command
-            if any(word in query_lower for word in ['open', 'launch', 'start', 'run']):
-                return self._execute_open_command(query, query_lower)
+            if any(word in clean_query for word in ['open', 'launch', 'start', 'run']):
+                return self._execute_open_command(query, clean_query)
             
             # PRIORITY 3: Closing apps
-            if any(word in query_lower for word in ['close', 'quit', 'exit', 'kill', 'stop']):
-                return self._execute_close_command(query, query_lower)
+            if any(word in clean_query for word in ['close', 'quit', 'exit', 'kill', 'stop']):
+                return self._execute_close_command(query, clean_query)
             
             # PRIORITY 4: Searching - Google, web search
-            if any(word in query_lower for word in ['google', 'search', 'find', 'look up', 'look for']):
-                return self._execute_search_command(query, query_lower)
+            if any(word in clean_query for word in ['google', 'search', 'find', 'look up', 'look for']) and 'download' not in clean_query:
+                return self._execute_search_command(query, clean_query)
+            
+            # PRIORITY 4.5: Downloading (YouTube/Media)
+            if 'download' in clean_query or ('get' in clean_query and 'audio' in clean_query):
+                return self._execute_download_command(query, clean_query)
             
             # PRIORITY 5: Playing music
-            if 'play' in query_lower:
-                return self._execute_play_command(query, query_lower)
+            if 'play' in clean_query:
+                return self._execute_play_command(query, clean_query)
             
             # PRIORITY 6: Creating documents
-            if any(word in query_lower for word in ['create', 'make', 'generate', 'new']) and \
-               any(doc in query_lower for doc in ['ppt', 'powerpoint', 'presentation', 'pdf', 'document', 'doc', 'word']):
-                return self._execute_create_document(query, query_lower)
+            if any(word in clean_query for word in ['create', 'make', 'generate', 'new']) and \
+               any(doc in clean_query for doc in ['ppt', 'powerpoint', 'presentation', 'pdf', 'document', 'doc', 'word']):
+                return self._execute_create_document(query, clean_query)
             
             # PRIORITY 7: Volume control
-            if 'volume' in query_lower or 'sound' in query_lower or 'mute' in query_lower:
-                return self._execute_volume_command(query, query_lower)
+            if 'volume' in clean_query or 'sound' in clean_query or 'mute' in clean_query:
+                return self._execute_volume_command(query, clean_query)
             
             # PRIORITY 8: System commands (shutdown, restart, etc.)
-            if any(word in query_lower for word in ['shutdown', 'restart', 'sleep', 'lock']):
-                return self._execute_system_command(query, query_lower)
+            if any(word in clean_query for word in ['shutdown', 'restart', 'sleep', 'lock']):
+                return self._execute_system_command(query, clean_query)
             
             return None
             
@@ -515,6 +524,33 @@ class AdvancedConversationalAI:
             print(f"Command execution error: {traceback.format_exc()}")
             return f"❌ Error executing command: {str(e)}"
     
+    def _execute_download_command(self, query: str, query_lower: str) -> str:
+        """Execute download commands (YouTube audio)."""
+        # Extract search term
+        search_term = query_lower
+        for word in ['download', 'get', 'audio', 'song', 'music', 'mp3', 'from', 'youtube', 'the', 'please', 'can', 'you']:
+            search_term = search_term.replace(word, '')
+        search_term = search_term.strip()
+        
+        if not search_term:
+            return "What song or video would you like me to download?"
+            
+        return f"⬇️ Downloading '{search_term}'... This might take a moment.\n\n" + \
+               self._perform_download_task(search_term)
+
+    def _perform_download_task(self, search_term: str) -> str:
+        """Helper to run download in a way that returns a string result."""
+        # In a real async system, this should be a background task.
+        # For now, we'll do it synchronously but warn the user.
+        try:
+            result = youtube_downloader.search_and_download_audio(search_term)
+            if result['status'] == 'success':
+                return f"✅ Success! Downloaded: {result['title']}\nSaved to: {result['file_path']}"
+            else:
+                return f"❌ Download failed: {result['message']}"
+        except Exception as e:
+            return f"❌ Error: {str(e)}"
+
     def _execute_open_command(self, query: str, query_lower: str) -> str:
         """Execute open application commands."""
         # Extract app name - remove command words

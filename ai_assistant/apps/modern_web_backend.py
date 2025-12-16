@@ -35,6 +35,12 @@ import re
 import secrets
 import logging
 # Fix Windows console encoding for emojis
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding='utf-8')
+
+# Import multimodal AI if available
+try:
+    from modules.multimodal import MultiModalAI
     MULTIMODAL_AVAILABLE = True
 except ImportError:
     MULTIMODAL_AVAILABLE = False
@@ -45,6 +51,18 @@ try:
     CONVERSATIONAL_AI_AVAILABLE = True
 except ImportError:
     CONVERSATIONAL_AI_AVAILABLE = False
+
+# Import automation tools
+try:
+    from automation_tools_new import *
+    from modules.research import research_topic
+    from modules.whatsapp import send_whatsapp_message
+    from modules.complex_workflows import process_file_workflow
+    AUTOMATION_AVAILABLE = True
+    print("✅ Automation tools loaded")
+except ImportError as e:
+    AUTOMATION_AVAILABLE = False
+    print(f"⚠️ Automation tools not available: {e}")
 
 # Import multilingual support if available
 try:
@@ -158,6 +176,18 @@ socketio = SocketIO(
     async_mode='threading',
     engineio_logger=False
 )
+
+def emit_dashboard_log(message, category='info', type='info'):
+    """Emit a log message to the dashboard"""
+    try:
+        socketio.emit('log_update', {
+            'message': message,
+            'category': category,
+            'type': type,
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        print(f"Log emit error: {e}")
 
 # Input Validation Patterns
 VALIDATION_PATTERNS = {
@@ -324,7 +354,7 @@ class ModernAssistant:
             self.llm_chat = UnifiedChatInterface(
                 provider=provider,
                 model=model,
-                use_fallback=True  # Enable automatic fallback
+                use_fallback=False  # Disable automatic fallback
             )
             
             # Store config for reference
@@ -334,10 +364,7 @@ class ModernAssistant:
             test_response = self.llm_chat.chat("Hello", stream=False)
             if "Error" not in test_response:
                 print(f"✅ Smart LLM initialized successfully with {provider}")
-                if provider == "ollama":
-                    print(f"🏠 Using your local {model} model")
-                elif provider in ["openai", "gemini"]:
-                    print(f"🌐 Using online {provider} API")
+                print(f"🌐 Using online {provider} API ({model})")
             else:
                 print(f"⚠️ LLM test failed: {test_response}")
                 
@@ -372,6 +399,8 @@ class ModernAssistant:
                 def automation_callback(action, param):
                     """Callback to execute automation tasks from conversational AI"""
                     try:
+                        emit_dashboard_log(f"Executing: {action}", "action")
+                        
                         if action == 'open_application':
                             if AUTOMATION_AVAILABLE:
                                 return open_application(param)
@@ -384,6 +413,11 @@ class ModernAssistant:
                             if AUTOMATION_AVAILABLE:
                                 return search_google(param)
                             return f"Searching for {param}..."
+                        elif action == 'research_topic':
+                            emit_dashboard_log(f"Researching: {param}", "research")
+                            if AUTOMATION_AVAILABLE:
+                                return research_topic(param)
+                            return f"Researching {param}..."
                         elif action == 'play_music':
                             if AUTOMATION_AVAILABLE:
                                 return search_and_play_spotify(param)
@@ -406,11 +440,40 @@ class ModernAssistant:
                             if AUTOMATION_AVAILABLE:
                                 return set_system_volume(0)
                             return "Muted"
+                        elif action == 'send_whatsapp':
+                            emit_dashboard_log(f"WhatsApp: {param}", "whatsapp")
+                            # param is expected to be a dict or string "contact|message"
+                            if AUTOMATION_AVAILABLE:
+                                if isinstance(param, str) and '|' in param:
+                                    contact, message = param.split('|', 1)
+                                    return send_whatsapp_message(contact.strip(), message.strip())
+                                return "Invalid WhatsApp parameters"
+                            return f"Sending WhatsApp: {param}"
+                        elif action == 'process_file_workflow':
+                            emit_dashboard_log(f"Workflow: {param}", "file")
+                            # param: "filename|contact"
+                            if AUTOMATION_AVAILABLE:
+                                if isinstance(param, str) and '|' in param:
+                                    filename, contact = param.split('|', 1)
+                                    return process_file_workflow(filename.strip(), contact.strip())
+                                return "Invalid workflow parameters"
+                            return f"Processing file workflow: {param}"
                     except Exception as e:
+                        emit_dashboard_log(f"Error: {str(e)}", "error")
                         return f"Error: {str(e)}"
                     return None
                 
-                self.conversational_ai = AdvancedConversationalAI(automation_callback=automation_callback)
+                # Create LLM callback function
+                def llm_callback(message):
+                    """Callback to use smart LLM for general conversation"""
+                    if hasattr(self, 'llm_chat') and self.llm_chat:
+                        return self.llm_chat.chat(message, stream=False)
+                    return None
+
+                self.conversational_ai = AdvancedConversationalAI(
+                    automation_callback=automation_callback,
+                    llm_callback=llm_callback
+                )
                 print("✅ Conversational AI initialized with automation support")
             except Exception as e:
                 print(f"❌ Conversational AI initialization failed: {e}")
@@ -838,9 +901,19 @@ class ModernAssistant:
 
 Just speak naturally - I understand context! 🎉"""
             
-            # Default response
+            # Default response - Pass to Advanced AI
             else:
-                return f"🤖 I heard: '{text}'\n\nTry asking about weather, system status, music control, opening apps, or say 'help' for more options!"
+                # Try conversational AI first (handles commands, research, whatsapp, etc.)
+                if hasattr(self, 'conversational_ai') and self.conversational_ai:
+                    return self.conversational_ai.process_message(text)
+                
+                # Fallback to basic LLM chat
+                elif hasattr(self, 'llm_chat') and self.llm_chat:
+                    return self.llm_chat.chat(text)
+                
+                # Final fallback
+                else:
+                    return f"🤖 I heard: '{text}'\n\nTry asking about weather, system status, music control, opening apps, or say 'help' for more options!"
                 
         except Exception as e:
             return f"🤖 Error: {str(e)}"
@@ -864,6 +937,8 @@ Just speak naturally - I understand context! 🎉"""
         mood = "neutral"
         context_id = None
         
+        emit_dashboard_log(f"Processing: {message[:50]}...", "thinking")
+        
         try:
             # Initialize context if not provided
             if context is None:
@@ -873,10 +948,12 @@ Just speak naturally - I understand context! 🎉"""
             if self.conversational_ai and message:
                 mood = self.conversational_ai.detect_mood(message).value
                 features_used.append("mood_detection")
+                emit_dashboard_log(f"Mood: {mood}", "thinking")
             
             # 2. MULTIMODAL PROCESSING (if image provided)
             if image_data and self.multimodal_ai:
                 try:
+                    emit_dashboard_log("Analyzing image...", "thinking")
                     # Process image with AI
                     visual_analysis = self.multimodal_ai.analyze_image_from_base64(image_data, message or "What do you see?")
                     response_text += f"🖼️ **Visual Analysis**: {visual_analysis}\n\n"
@@ -905,17 +982,40 @@ Just speak naturally - I understand context! 🎉"""
                     
                     # Translate to English if needed
                     if language_context.detected_language.value == "hindi":
+                        emit_dashboard_log("Translating Hindi...", "thinking")
                         processed_message = self.multilingual.translate_text(message, Language.ENGLISH)
                         features_used.append("translation")
                         
                 except Exception as e:
                     print(f"Multilingual processing error: {e}")
             
-            # 4. SMART LLM PROCESSING (Network-Aware)
+            # 4. SMART PROCESSING (Conversational AI + LLM Fallback)
             if processed_message:
                 try:
-                    # Use smart LLM system that auto-selects best provider
-                    if hasattr(self, 'llm_chat') and self.llm_chat:
+                    emit_dashboard_log("Engaging AI Core...", "thinking")
+                    # Try Conversational AI first (handles commands, research, whatsapp, etc.)
+                    # It will use the LLM callback internally for general chat if needed!
+                    if self.conversational_ai:
+                        # Create or get conversation context
+                        if not hasattr(self, '_current_context_id') or not self._current_context_id:
+                            self._current_context_id = self.conversational_ai.create_context(
+                                "Enhanced Chat", "Multi-feature conversation", processed_message
+                            )
+                        context_id = self._current_context_id
+                        
+                        # Process with conversational AI
+                        ai_response = self.conversational_ai.process_message(processed_message)
+                        response_text += ai_response
+                        features_used.append("conversational_ai")
+                        
+                        # Get suggestions
+                        suggestions = self.conversational_ai.suggest_next_actions()
+                        if suggestions:
+                            features_used.append("ai_suggestions")
+
+                    # Fallback to direct LLM if Conversational AI is missing
+                    elif hasattr(self, 'llm_chat') and self.llm_chat:
+                        emit_dashboard_log("Using Fallback LLM...", "thinking")
                         # Get current provider info
                         provider_info = ""
                         if hasattr(self, 'current_llm_config') and self.current_llm_config:
@@ -928,25 +1028,6 @@ Just speak naturally - I understand context! 🎉"""
                         ai_response = self.llm_chat.chat(processed_message, stream=False)
                         response_text += ai_response
                         features_used.append(f"smart_llm{provider_info}")
-                        
-                    # Fallback to conversational AI if smart LLM fails
-                    elif self.conversational_ai:
-                        # Create or get conversation context
-                        if not hasattr(self, '_current_context_id') or not self._current_context_id:
-                            self._current_context_id = self.conversational_ai.create_context(
-                                "Enhanced Chat", "Multi-feature conversation", processed_message
-                            )
-                        context_id = self._current_context_id
-                        
-                        # Process with conversational AI
-                        ai_response = self.conversational_ai.process_message(processed_message)
-                        response_text += ai_response
-                        features_used.append("conversational_ai_fallback")
-                        
-                        # Get suggestions
-                        suggestions = self.conversational_ai.suggest_next_actions()
-                        if suggestions:
-                            features_used.append("ai_suggestions")
                     else:
                         response_text += "❌ No AI system available for processing"
                         
@@ -1326,6 +1407,15 @@ def enhanced_chat():
     except Exception as e:
         print(f"Enhanced chat template error: {e}")
         return f"<h1>Enhanced Chat Template Error</h1><p>Error: {e}</p><p><a href='/'>Go back to main page</a></p>"
+
+@app.route('/dashboard')
+def dashboard():
+    """Serve the new AI Command Center Dashboard"""
+    from flask import render_template
+    try:
+        return render_template('dashboard.html')
+    except Exception as e:
+        return f"<h1>Dashboard Error</h1><p>Error: {e}</p>"
 
 @app.route('/test')
 def test_page():

@@ -17,10 +17,16 @@ import datetime
 import re
 from typing import Dict, List, Optional, Tuple, Any
 from bs4 import BeautifulSoup
-import feedparser
 import time
 from urllib.parse import urljoin, urlparse
 import os
+
+try:
+    import feedparser
+    FEEDPARSER_AVAILABLE = True
+except ImportError:
+    FEEDPARSER_AVAILABLE = False
+    print("⚠️ feedparser not found. RSS features will be disabled.")
 
 class WebScrapingManager:
     """

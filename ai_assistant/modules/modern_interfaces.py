@@ -30,8 +30,19 @@ from flask_socketio import SocketIO, emit, disconnect
 from flask_cors import CORS
 
 # Voice processing
-import speech_recognition as sr
-import pyttsx3
+try:
+    import speech_recognition as sr
+    SPEECH_RECOGNITION_AVAILABLE = True
+except ImportError:
+    SPEECH_RECOGNITION_AVAILABLE = False
+    print("Warning: speech_recognition not available. Voice features disabled.")
+
+try:
+    import pyttsx3
+    PYTTSX3_AVAILABLE = True
+except ImportError:
+    PYTTSX3_AVAILABLE = False
+    print("Warning: pyttsx3 not available. TTS features disabled.")
 
 # QR code for mobile pairing
 try:

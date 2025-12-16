@@ -46,11 +46,16 @@ token.pickle
 # App Integration Security
 config/secure/
 config/app_integration.env
+config/backend.env
 config/*_credentials.json
+config/encryption.key
 *_credentials.json
 *.credentials
 api_keys/
 secrets/
+*_token.pickle
+calendar_token.pickle
+gmail_token.pickle
 
 # Database Files
 *.db

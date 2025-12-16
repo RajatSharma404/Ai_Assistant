@@ -16,11 +16,16 @@ import pickle
 import json
 from pathlib import Path
 from typing import Optional, Dict, List
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
+try:
+    from google.oauth2.credentials import Credentials
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from google.auth.transport.requests import Request
+    from googleapiclient.discovery import build
+    from googleapiclient.errors import HttpError
+    GOOGLE_CALENDAR_AVAILABLE = True
+except ImportError:
+    GOOGLE_CALENDAR_AVAILABLE = False
+    print("⚠️ Google Calendar dependencies not found. Calendar features will be disabled.")
 
 # Calendar scope for read/write access
 SCOPES = ['https://www.googleapis.com/auth/calendar']
@@ -56,6 +61,9 @@ class CalendarManager:
         Sets up Google Calendar authentication
         Returns status message
         """
+        if not GOOGLE_CALENDAR_AVAILABLE:
+            return "❌ Google Calendar dependencies missing. Install with: pip install google-auth-oauthlib google-api-python-client"
+
         try:
             creds = None
             

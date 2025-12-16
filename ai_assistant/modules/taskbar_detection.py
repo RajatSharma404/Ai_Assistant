@@ -8,7 +8,12 @@ import os
 import psutil
 import time
 from typing import Dict, List, Tuple, Optional, Any
-from PIL import Image, ImageGrab
+try:
+    from PIL import Image, ImageGrab
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+    print("Warning: PIL not available. Visual taskbar detection disabled.")
 import json
 from datetime import datetime
 
@@ -197,6 +202,9 @@ class TaskbarDetector:
         """
         if not self.multimodal:
             return {"error": "Visual analysis not available"}
+            
+        if not PIL_AVAILABLE:
+            return {"error": "PIL not available for screen capture"}
         
         print("🔍 Analyzing taskbar region specifically...")
         

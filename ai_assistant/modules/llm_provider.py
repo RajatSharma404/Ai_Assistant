@@ -9,7 +9,7 @@ import os
 import json
 import time
 import logging
-from typing import Dict, List, Optional, Generator, Any, Callable
+from typing import Dict, List, Optional, Generator, Any, Callable, Union
 from abc import ABC, abstractmethod
 from datetime import datetime
 import re
@@ -388,16 +388,13 @@ class LLMFactory:
             return (provider, model)
         except Exception as e:
             logger.error(f"Smart provider detection failed: {e}")
-            # Fallback to original logic
-            if os.getenv("FORCE_OFFLINE_MODE", "false").lower() == "true":
-                return ("offline", "offline")
-            
+            # Fallback to online providers only
             if os.getenv("OPENAI_API_KEY"):
                 return ("openai", "gpt-3.5-turbo")
             elif os.getenv("GEMINI_API_KEY"):
                 return ("gemini", "gemini-pro")
             else:
-                return ("ollama", "gemma3:27b")  # Use your local model
+                raise RuntimeError("No API keys configured. Please set OPENAI_API_KEY or GEMINI_API_KEY")
     
     @classmethod
     def create_with_fallback(cls, preferred_provider: Optional[str] = None, **kwargs) -> LLMProvider:
@@ -422,15 +419,16 @@ class LLMFactory:
             return cls.create(provider, **kwargs)
         except Exception as e:
             logger.warning(f"Failed to create {provider} provider: {e}")
+            raise
             
             # Fallback to offline
-            if provider != "offline":
-                logger.info("Falling back to offline provider")
-                try:
-                    return cls.create("offline", **kwargs)
-                except Exception as e2:
-                    logger.error(f"Offline provider also failed: {e2}")
-                    raise
+            # if provider != "offline":
+            #     logger.info("Falling back to offline provider")
+            #     try:
+            #         return cls.create("offline", **kwargs)
+            #     except Exception as e2:
+            #         logger.error(f"Offline provider also failed: {e2}")
+            #         raise
 
 
 class UnifiedChatInterface:
@@ -482,7 +480,7 @@ class UnifiedChatInterface:
         """Add assistant message."""
         self.conversation_history.append({"role": "assistant", "content": content})
     
-    def chat(self, user_message: str, stream: bool = False, **kwargs) -> str | Generator[str, None, None]:
+    def chat(self, user_message: str, stream: bool = False, **kwargs) -> Union[str, Generator[str, None, None]]:
         """Send a chat message and get response."""
         self.add_user_message(user_message)
         

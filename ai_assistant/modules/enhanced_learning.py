@@ -14,7 +14,13 @@ from collections import defaultdict, Counter
 import pickle
 import os
 from dataclasses import dataclass
-import networkx as nx
+try:
+    import networkx as nx
+    NETWORKX_AVAILABLE = True
+except ImportError:
+    print("⚠️ NetworkX not available - knowledge graph features disabled")
+    NETWORKX_AVAILABLE = False
+    nx = None
 
 # Optional scientific libraries
 try:
@@ -495,12 +501,13 @@ class PersonalKnowledgeGraph:
             # Load nodes
             cursor.execute("SELECT node_id, content, node_type, importance_score FROM knowledge_nodes")
             for node_id, content, node_type, importance in cursor.fetchall():
-                self.graph.add_node(node_id, content=content, type=node_type, importance=importance)
+                if NETWORKX_AVAILABLE:
+                    self.graph.add_node(node_id, content=content, type=node_type, importance=importance)
             
             # Load edges
             cursor.execute("SELECT source_node, target_node, relationship_type, strength FROM knowledge_edges")
             for source, target, rel_type, strength in cursor.fetchall():
-                if self.graph.has_node(source) and self.graph.has_node(target):
+                if NETWORKX_AVAILABLE and self.graph.has_node(source) and self.graph.has_node(target):
                     self.graph.add_edge(source, target, relationship=rel_type, weight=strength)
                     
         except sqlite3.OperationalError as e:
@@ -525,7 +532,8 @@ class PersonalKnowledgeGraph:
         conn.commit()
         conn.close()
         
-        self.graph.add_node(node_id, content=content, type=node_type, importance=0.5)
+        if NETWORKX_AVAILABLE:
+            self.graph.add_node(node_id, content=content, type=node_type, importance=0.5)
         return node_id
     
     def add_relationship(self, source_id: str, target_id: str, relationship_type: str, strength: float = 1.0):
@@ -544,7 +552,7 @@ class PersonalKnowledgeGraph:
         conn.commit()
         conn.close()
         
-        if self.graph.has_node(source_id) and self.graph.has_node(target_id):
+        if NETWORKX_AVAILABLE and self.graph.has_node(source_id) and self.graph.has_node(target_id):
             self.graph.add_edge(source_id, target_id, relationship=relationship_type, weight=strength)
     
     def update_from_interaction(self, context: Dict[str, Any], action: str, outcome: str):
@@ -562,6 +570,9 @@ class PersonalKnowledgeGraph:
         """Find concepts related to given concept"""
         related = []
         
+        if not NETWORKX_AVAILABLE:
+            return related
+
         # Find node containing concept
         concept_node = None
         for node_id, data in self.graph.nodes(data=True):
@@ -593,12 +604,18 @@ class PersonalKnowledgeGraph:
     def generate_insights(self) -> Dict[str, Any]:
         """Generate insights from the knowledge graph"""
         insights = {
-            "total_nodes": self.graph.number_of_nodes(),
-            "total_relationships": self.graph.number_of_edges(),
+            "total_nodes": 0,
+            "total_relationships": 0,
             "most_connected": [],
             "knowledge_clusters": [],
             "learning_paths": []
         }
+        
+        if not NETWORKX_AVAILABLE:
+            return insights
+
+        insights["total_nodes"] = self.graph.number_of_nodes()
+        insights["total_relationships"] = self.graph.number_of_edges()
         
         if self.graph.number_of_nodes() > 0:
             # Most connected nodes
@@ -658,19 +675,20 @@ class PersonalKnowledgeGraph:
                 node_colors.append('lightgray')
         
         # Draw graph
-        nx.draw(self.graph, pos, 
-                node_color=node_colors,
-                node_size=500,
-                font_size=8,
-                font_weight='bold',
-                with_labels=False,
-                edge_color='gray',
-                arrows=True)
-        
-        # Add labels
-        labels = {node: self.graph.nodes[node]['content'][:15] + ('...' if len(self.graph.nodes[node]['content']) > 15 else '') 
-                 for node in self.graph.nodes()}
-        nx.draw_networkx_labels(self.graph, pos, labels, font_size=6)
+        if NETWORKX_AVAILABLE:
+            nx.draw(self.graph, pos, 
+                    node_color=node_colors,
+                    node_size=500,
+                    font_size=8,
+                    font_weight='bold',
+                    with_labels=False,
+                    edge_color='gray',
+                    arrows=True)
+            
+            # Add labels
+            labels = {node: self.graph.nodes[node]['content'][:15] + ('...' if len(self.graph.nodes[node]['content']) > 15 else '') 
+                     for node in self.graph.nodes()}
+            nx.draw_networkx_labels(self.graph, pos, labels, font_size=6)
         
         plt.title("Personal Knowledge Graph")
         plt.axis('off')

@@ -4,6 +4,12 @@
 # Install with: pip install -r requirements.txt
 
 # =========================================
+# MEDIA DOWNLOADERS
+# =========================================
+yt-dlp>=2023.11.16
+static-ffmpeg>=2.5
+
+# =========================================
 # WEB FRAMEWORK & API
 # =========================================
 Flask==3.1.0
@@ -42,6 +48,7 @@ google-ai-generativelanguage==0.6.15
 google-api-core==2.28.1
 google-api-python-client==2.187.0
 google-auth==2.43.0
+google-auth-oauthlib
 google-auth-httplib2==0.2.1
 googleapis-common-protos==1.72.0
 
@@ -98,6 +105,7 @@ pywin32==311
 pywin32-ctypes==0.2.3
 pyautogui==0.9.54
 comtypes==1.4.13
+pycaw==20240210
 win32-setctime==1.1.0
 
 # =========================================

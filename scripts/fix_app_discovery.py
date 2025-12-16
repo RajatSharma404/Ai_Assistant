@@ -1,4 +1,6 @@
-"""
+"""Fix app_discovery.py to be a clean re-export module with proper fallback"""
+
+content = '''"""
 App Discovery Module - Re-export
 Re-export from canonical location to avoid code duplication.
 The comprehensive implementation is in ai_assistant.modules.app_discovery
@@ -53,8 +55,8 @@ except ImportError:
         apps = {}
         
         paths = [
-            os.path.join(os.environ.get('APPDATA', ''), r'Microsoft\Windows\Start Menu\Programs'),
-            os.path.join(os.environ.get('PROGRAMDATA', ''), r'Microsoft\Windows\Start Menu\Programs')
+            os.path.join(os.environ.get('APPDATA', ''), r'Microsoft\\Windows\\Start Menu\\Programs'),
+            os.path.join(os.environ.get('PROGRAMDATA', ''), r'Microsoft\\Windows\\Start Menu\\Programs')
         ]
 
         for path in paths:
@@ -125,3 +127,12 @@ except ImportError:
         'refresh_app_database',
         'list_installed_apps',
     ]
+'''
+
+file_path = 'f:/bn/assitant/ai_assistant/core/app_discovery.py'
+
+with open(file_path, 'w', encoding='utf-8') as f:
+    f.write(content)
+
+print(f"✅ Fixed {file_path}")
+print(f"   File size: {len(content)} bytes")
