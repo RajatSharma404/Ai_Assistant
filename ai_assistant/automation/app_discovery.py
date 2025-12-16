@@ -17,8 +17,16 @@ from datetime import datetime
 
 class AppDiscovery:
     def __init__(self):
-        self.apps_cache_file = "discovered_apps.json"
-        self.usage_db_file = "app_usage.db"
+        # Get the project root directory (2 levels up from this file)
+        project_root = Path(__file__).parent.parent.parent
+        config_dir = project_root / "config"
+        
+        # Ensure config directory exists
+        config_dir.mkdir(exist_ok=True)
+        
+        # Set paths relative to config directory
+        self.apps_cache_file = str(config_dir / "discovered_apps.json")
+        self.usage_db_file = str(config_dir / "app_usage.db")
         self.apps_database = {}
         self.load_cache()
         self._init_usage_database()
@@ -398,9 +406,43 @@ class AppDiscovery:
             print(f"Error getting recent apps: {e}")
             return []
     
+    def _split_camel_case(self, text: str) -> str:
+        """Split camelCase and PascalCase words with spaces."""
+        import re
+        # Insert space before capital letters (except at start)
+        result = re.sub(r'(?<!^)(?=[A-Z])', ' ', text)
+        result = result.lower()
+        
+        # Also try to split known compound words in lowercase
+        # This handles cases like "microsoftstickynotes" -> "microsoft sticky notes"
+        compound_patterns = [
+            (r'microsoft', 'microsoft '),
+            (r'sticky', ' sticky '),
+            (r'notes', ' notes '),
+            (r'google', 'google '),
+            (r'chrome', ' chrome '),
+            (r'spotify', ' spotify '),
+            (r'adobe', 'adobe '),
+            (r'reader', ' reader '),
+            (r'player', ' player '),
+            (r'media', ' media '),
+            (r'video', ' video '),
+            (r'music', ' music '),
+        ]
+        
+        for pattern, replacement in compound_patterns:
+            result = re.sub(pattern, replacement, result)
+        
+        # Clean up extra spaces
+        result = ' '.join(result.split())
+        return result
+    
     def find_app(self, app_name: str) -> str:
         """Find application by name using advanced fuzzy matching with usage-based ranking."""
         app_name_lower = app_name.lower().strip()
+        
+        # Normalize the search query (remove special chars, handle spaces)
+        normalized_query = app_name_lower.replace('.', ' ').replace('_', ' ').replace('-', ' ')
         
         # Get usage statistics for ranking boost
         most_used = {name.lower(): count for name, count in self.get_most_used_apps(100)}
@@ -408,7 +450,12 @@ class AppDiscovery:
         matches = []
         
         for db_name, db_path in self.apps_database.items():
-            score = self._calculate_match_score(app_name_lower, db_name, most_used.get(db_name, 0))
+            # Normalize database name for comparison
+            # First split camelCase, then replace special chars
+            normalized_db_name = self._split_camel_case(db_name)
+            normalized_db_name = normalized_db_name.replace('.', ' ').replace('_', ' ').replace('-', ' ')
+            
+            score = self._calculate_match_score(normalized_query, normalized_db_name, most_used.get(db_name, 0))
             if score > 0:
                 matches.append((score, db_name, db_path))
         
@@ -438,17 +485,17 @@ class AppDiscovery:
         if app_name in query:
             score += 40
         
-        # Word-based matching
+        # Word-based matching - check if ALL query words are present
         query_words = set(query.split())
         app_words = set(app_name.split())
         
-        # All query words present
-        if query_words.issubset(app_words):
-            score += 30
+        # Check if all query words exist in app name (important for multi-word searches)
+        if query_words and query_words.issubset(app_words):
+            score += 80  # High score for containing all words
         
-        # Some query words present
+        # Some query words present (partial match)
         common_words = query_words & app_words
-        if common_words:
+        if common_words and not query_words.issubset(app_words):
             score += len(common_words) * 10
         
         # Character-level fuzzy matching (Levenshtein-like)
@@ -533,7 +580,7 @@ class AppDiscovery:
         
         if any(word in app_lower for word in ['chrome', 'firefox', 'edge', 'browser']):
             return "Browser"
-        elif any(word in app_lower for word in ['notepad', 'word', 'excel', 'powerpoint', 'office']):
+        elif any(word in app_lower for word in ['notepad', 'word', 'excel', 'powerpoint', 'office', 'sticky', 'onenote']):
             return "Productivity"
         elif any(word in app_lower for word in ['code', 'visual', 'studio', 'terminal', 'cmd', 'powershell']):
             return "Development"
@@ -601,6 +648,20 @@ def smart_open_application(app_name: str) -> str:
     app_path = app_discovery.find_app(app_name)
     
     if app_path:
+        # Check if this is a browser proxy (web app, not native)
+        is_browser_proxy = any(x in app_path.lower() for x in ['chrome_proxy', 'chrome.exe --app', 'msedge.exe --app'])
+        
+        # For Spotify specifically, prefer web version if only browser proxy exists
+        if is_browser_proxy and 'spotify' in app_name.lower():
+            try:
+                import webbrowser
+                webbrowser.open('https://open.spotify.com')
+                app_discovery.track_app_launch(app_name, 'https://open.spotify.com', success=True)
+                return f"✅ Opened {app_name} in web browser (native app not installed)"
+            except Exception as e:
+                app_discovery.track_app_launch(app_name, "", success=False)
+                return f"❌ Failed to open {app_name}: {e}"
+        
         try:
             if app_path.startswith('explorer.exe shell:appsFolder'):
                 # Windows Store app - use subprocess for security
@@ -612,7 +673,7 @@ def smart_open_application(app_name: str) -> str:
             
             # Track successful launch
             app_discovery.track_app_launch(app_name, app_path, success=True)
-            return f"✅ Successfully opened {app_name} from {app_path}"
+            return f"✅ Successfully opened {app_name}"
         except Exception as e:
             # Track failed launch
             app_discovery.track_app_launch(app_name, app_path, success=False)

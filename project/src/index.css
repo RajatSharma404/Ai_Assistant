@@ -419,3 +419,128 @@ a:focus-visible {
 .magnetic-hover:hover {
   transform: scale(1.05);
 }
+
+/* Prose Styling for Markdown Content */
+.prose-invert {
+  color: #DDDDDD;
+  max-width: 100%;
+}
+
+.prose-invert p {
+  margin-bottom: 1em;
+  line-height: 1.7;
+}
+
+.prose-invert h1, .prose-invert h2, .prose-invert h3, .prose-invert h4, .prose-invert h5, .prose-invert h6 {
+  color: #FFFFFF;
+  font-weight: 600;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  line-height: 1.3;
+}
+
+.prose-invert h1 {
+  font-size: 1.875rem;
+}
+
+.prose-invert h2 {
+  font-size: 1.5rem;
+}
+
+.prose-invert h3 {
+  font-size: 1.25rem;
+}
+
+.prose-invert code {
+  color: #00CEC9;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.2em 0.4em;
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.prose-invert pre {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 1em 0;
+}
+
+.prose-invert pre code {
+  background: transparent;
+  padding: 0;
+  color: #DDDDDD;
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+.prose-invert ul, .prose-invert ol {
+  margin: 1em 0;
+  padding-left: 1.5em;
+}
+
+.prose-invert li {
+  margin: 0.5em 0;
+  line-height: 1.7;
+}
+
+.prose-invert ul li {
+  list-style-type: disc;
+}
+
+.prose-invert ol li {
+  list-style-type: decimal;
+}
+
+.prose-invert blockquote {
+  border-left: 4px solid #00CEC9;
+  padding-left: 1em;
+  margin: 1em 0;
+  color: #AAAAAA;
+  font-style: italic;
+}
+
+.prose-invert a {
+  color: #00CEC9;
+  text-decoration: underline;
+  transition: color 0.2s;
+}
+
+.prose-invert a:hover {
+  color: #6C5CE7;
+}
+
+.prose-invert table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+}
+
+.prose-invert th, .prose-invert td {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.5em 1em;
+  text-align: left;
+}
+
+.prose-invert th {
+  background: rgba(255, 255, 255, 0.05);
+  font-weight: 600;
+}
+
+.prose-invert hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 2em 0;
+}
+
+.prose-invert strong {
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+.prose-invert em {
+  font-style: italic;
+}
