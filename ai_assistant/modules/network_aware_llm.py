@@ -28,9 +28,10 @@ class OnlineLLMConfig:
         gemini_key = self.api_keys.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
         
         # Online providers only - ordered by preference
+        # Using gemini-1.5-flash as primary (faster and more reliable than pro)
         self.online_providers = [
-            ("gemini", "gemini-1.5-pro", gemini_key),
             ("gemini", "gemini-1.5-flash", gemini_key),
+            ("gemini", "gemini-pro", gemini_key),
             ("openai", "gpt-4o", openai_key),
             ("openai", "gpt-4", openai_key),
             ("openai", "gpt-3.5-turbo", openai_key),

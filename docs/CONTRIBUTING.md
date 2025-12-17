@@ -35,12 +35,12 @@ By participating in this project, you agree to abide by our code of conduct:
 1. **Fork the repository** on GitHub
 2. **Clone your fork** locally:
    ```bash
-   git clone https://github.com/your-username/yourdaddy-assistant.git
-   cd yourdaddy-assistant
+   git clone https://github.com/your-username/Ai_Assistant.git
+   cd Ai_Assistant
    ```
 3. **Add upstream remote**:
    ```bash
-   git remote add upstream https://github.com/original-owner/yourdaddy-assistant.git
+   git remote add upstream https://github.com/original-owner/Ai_Assistant.git
    ```
 
 ## 🛠️ Development Setup

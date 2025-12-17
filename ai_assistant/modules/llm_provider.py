@@ -122,7 +122,7 @@ class OpenAIProvider(LLMProvider):
 class GeminiProvider(LLMProvider):
     """Google Gemini provider."""
     
-    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-pro"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-1.5-flash"):
         """Initialize Gemini provider."""
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         self.model = model
@@ -136,6 +136,9 @@ class GeminiProvider(LLMProvider):
             self.client = genai.GenerativeModel(model)
         except ImportError:
             raise ImportError("Google Generative AI package required: pip install google-generativeai")
+        except Exception as e:
+            logger.error(f"Gemini initialization failed: {e}")
+            raise
     
     def generate_response(self, messages: List[Dict[str, str]], **kwargs) -> str:
         """Generate response from Gemini."""

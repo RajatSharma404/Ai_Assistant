@@ -47,6 +47,7 @@ class TokenCounter:
         "gpt-4-turbo": 128000,
         "gpt-3.5-turbo": 4096,
         "gemini-pro": 32768,
+        "gemini-1.5-flash": 1000000,
         "gemini-1.5-pro": 1000000,
         "llama-2-7b": 4096,
         "llama-2-70b": 4096,

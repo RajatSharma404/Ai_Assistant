@@ -177,6 +177,20 @@ body {
   animation: slide-in 0.5s ease-out;
 }
 
+/* WhatsApp-like message styling */
+.prose-sm p {
+  margin: 0 !important;
+  line-height: 1.4 !important;
+}
+
+.prose-sm > *:first-child {
+  margin-top: 0 !important;
+}
+
+.prose-sm > *:last-child {
+  margin-bottom: 0 !important;
+}
+
 .animate-fade-in {
   animation: fade-in 0.3s ease-out;
 }

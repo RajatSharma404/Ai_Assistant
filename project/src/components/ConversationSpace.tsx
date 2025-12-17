@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Smile, Paperclip, MoreVertical, Copy, Check, RefreshCw, Edit2, StopCircle, Sparkles, ChevronDown, Trash2 } from 'lucide-react';
+import { Send, Paperclip, MoreVertical, Copy, Check, RefreshCw, Edit2, Sparkles, ChevronDown, Trash2 } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -39,6 +39,12 @@ const ConversationSpace = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<Message[]>([]);
+
+  // Keep messagesRef in sync with messages state
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   const conversationStarters = [
     { icon: '✨', text: 'What can you help me with?', category: 'general' },
@@ -78,17 +84,19 @@ const ConversationSpace = () => {
     newSocket.on('command_response', (data: { response?: string; error?: string; success?: boolean }) => {
       const responseText = data.error || data.response || 'No response received';
       
-      // Get the last user message for context
-      const lastUserMsg = messages.filter(m => m.sender === 'user').pop();
-      
-      const aiResponse: Message = {
-        id: `ai-${Date.now()}`,
-        text: responseText,
-        sender: 'ai',
-        timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-        suggestions: generateSmartSuggestions(responseText, lastUserMsg?.text),
-      };
-      setMessages((prev) => [...prev, aiResponse]);
+      setMessages((prev) => {
+        const lastUserMsg = prev.filter(m => m.sender === 'user').pop();
+        
+        const aiResponse: Message = {
+          id: `ai-${Date.now()}`,
+          text: responseText,
+          sender: 'ai',
+          timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          suggestions: generateSmartSuggestions(responseText, lastUserMsg?.text),
+        };
+        
+        return [...prev, aiResponse];
+      });
       setIsProcessing(false);
     });
 
@@ -177,7 +185,7 @@ const ConversationSpace = () => {
       suggestions.push('Search something else', 'Open browser');
     } else {
       // Only show generic suggestions for first few responses
-      if (messages.length <= 4) {
+      if (messagesRef.current.length <= 4) {
         suggestions.push('What else can you do?');
       }
       return suggestions.slice(0, 1);
@@ -187,25 +195,31 @@ const ConversationSpace = () => {
   };
 
   const saveCurrentSession = () => {
-    if (messages.length === 0) return;
+    // Filter out any empty messages before saving
+    const validMessages = messages.filter(m => m.text && m.text.trim() !== '');
+    if (validMessages.length === 0) return;
 
     const session: ChatSession = {
       id: currentSessionId,
-      title: messages[0]?.text.slice(0, 50) + (messages[0]?.text.length > 50 ? '...' : ''),
+      title: validMessages[0]?.text.slice(0, 50) + (validMessages[0]?.text.length > 50 ? '...' : ''),
       timestamp: new Date().toISOString(),
-      preview: messages[messages.length - 1]?.text.slice(0, 100),
+      preview: validMessages[validMessages.length - 1]?.text.slice(0, 100),
     };
 
     const updatedSessions = [session, ...sessions.filter(s => s.id !== currentSessionId)].slice(0, 20);
     setSessions(updatedSessions);
     localStorage.setItem('chatSessions', JSON.stringify(updatedSessions));
-    localStorage.setItem(`chat-${currentSessionId}`, JSON.stringify(messages));
+    localStorage.setItem(`chat-${currentSessionId}`, JSON.stringify(validMessages));
   };
 
   const loadSession = (sessionId: string) => {
     const savedMessages = localStorage.getItem(`chat-${sessionId}`);
     if (savedMessages) {
-      setMessages(JSON.parse(savedMessages));
+      // Filter out any corrupted messages without text
+      const parsedMessages = JSON.parse(savedMessages).filter(
+        (m: Message) => m.text && m.text.trim() !== ''
+      );
+      setMessages(parsedMessages);
       setCurrentSessionId(sessionId);
       setShowSessions(false);
     }
@@ -302,16 +316,6 @@ const ConversationSpace = () => {
     }
 
     setIsProcessing(true);
-
-    // Add streaming placeholder
-    const streamingMessage: Message = {
-      id: `ai-streaming-${Date.now()}`,
-      text: '',
-      sender: 'ai',
-      timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-      isStreaming: true,
-    };
-    setMessages(prev => [...prev, streamingMessage]);
 
     try {
       if (socket && isConnected) {
@@ -468,7 +472,7 @@ const ConversationSpace = () => {
           </div>
 
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-custom">
+          <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1 scrollbar-custom">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center">
                 <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[#00CEC9] to-[#6C5CE7] flex items-center justify-center mb-6 text-4xl animate-pulse">
@@ -498,23 +502,23 @@ const ConversationSpace = () => {
                 </div>
               </div>
             ) : (
-              messages.map((message, index) => (
+              messages.filter(m => m.text && m.text.trim() !== '').map((message, index) => (
                 <div
                   key={message.id}
-                  className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in group`}
+                  className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'} group`}
                 >
-                  <div className={`max-w-[85%] ${message.sender === 'user' ? 'order-2' : 'order-1'}`}>
+                  <div className="max-w-[85%]">
                     <div
                       className={`${
                         message.sender === 'user'
-                          ? 'bg-gradient-to-br from-[#00CEC9] to-[#6C5CE7] rounded-2xl rounded-tr-md'
-                          : 'glass rounded-2xl rounded-tl-md'
-                      } p-4 ${message.isStreaming ? 'animate-pulse' : ''}`}
+                          ? 'bg-gradient-to-r from-[#00CEC9] to-[#6C5CE7] rounded-2xl rounded-br-md'
+                          : 'bg-[#1f2937] rounded-2xl rounded-bl-md'
+                      } px-3 py-2 shadow-sm`}
                     >
                       {message.sender === 'user' ? (
-                        <p className="text-white whitespace-pre-wrap">{message.text}</p>
+                        <p className="text-white whitespace-pre-wrap text-sm leading-relaxed">{message.text}</p>
                       ) : (
-                        <div className="prose prose-invert max-w-none">
+                        <div className="prose prose-invert prose-sm max-w-none [&>p]:my-0 [&>p]:leading-relaxed">
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm, remarkBreaks]}
                             rehypePlugins={[rehypeHighlight, rehypeRaw]}
@@ -553,52 +557,54 @@ const ConversationSpace = () => {
                         </div>
                       )}
                       
-                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/10">
-                        <span className="text-xs text-white/60">{message.timestamp}</span>
-                        {message.sender === 'ai' && !message.isStreaming && (
-                          <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-end gap-1 mt-1">
+                        <span className="text-[10px] text-white/50">{message.timestamp}</span>
+                        {message.sender === 'ai' && (
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               onClick={() => handleCopy(message.text, message.id)}
-                              className="p-1.5 hover:bg-white/10 rounded transition-colors opacity-0 group-hover:opacity-100"
+                              className="p-1 hover:bg-white/10 rounded transition-colors"
                               title="Copy response"
                             >
                               {copiedId === message.id ? (
-                                <Check size={14} className="text-green-400" />
+                                <Check size={12} className="text-green-400" />
                               ) : (
-                                <Copy size={14} />
+                                <Copy size={12} className="text-white/50" />
                               )}
                             </button>
                             <button
                               onClick={() => handleRegenerate(message.id)}
-                              className="p-1.5 hover:bg-white/10 rounded transition-colors opacity-0 group-hover:opacity-100"
+                              className="p-1 hover:bg-white/10 rounded transition-colors"
                               title="Regenerate response"
                             >
-                              <RefreshCw size={14} />
+                              <RefreshCw size={12} className="text-white/50" />
                             </button>
                           </div>
                         )}
                         {message.sender === 'user' && (
-                          <button
-                            onClick={() => handleEdit(message.id)}
-                            className="p-1.5 hover:bg-white/10 rounded transition-colors opacity-0 group-hover:opacity-100"
-                            title="Edit message"
-                          >
-                            <Edit2 size={14} />
-                          </button>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => handleEdit(message.id)}
+                              className="p-1 hover:bg-white/10 rounded transition-colors"
+                              title="Edit message"
+                            >
+                              <Edit2 size={12} className="text-white/50" />
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
 
                     {/* Smart Suggestions - Only show for the latest AI message */}
-                    {message.sender === 'ai' && message.suggestions && message.suggestions.length > 0 && !message.isStreaming && index === messages.length - 1 && (
-                      <div className="flex flex-wrap gap-2 mt-3">
+                    {message.sender === 'ai' && message.suggestions && message.suggestions.length > 0 && index === messages.filter(m => m.text && m.text.trim() !== '').length - 1 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
                         {message.suggestions.map((suggestion, idx) => (
                           <button
                             key={idx}
                             onClick={() => handleSuggestionClick(suggestion)}
-                            className="px-3 py-1.5 text-xs rounded-lg border border-white/20 hover:border-[#00CEC9] hover:bg-white/5 transition-all group/suggest"
+                            className="px-2.5 py-1 text-xs rounded-full bg-white/10 hover:bg-[#00CEC9]/20 border border-white/10 hover:border-[#00CEC9]/50 transition-all"
                           >
-                            <span className="opacity-70 group-hover/suggest:opacity-100 transition-opacity">{suggestion}</span>
+                            {suggestion}
                           </button>
                         ))}
                       </div>
@@ -607,25 +613,25 @@ const ConversationSpace = () => {
                 </div>
               ))
             )}
-            {isProcessing && messages[messages.length - 1]?.isStreaming && (
-              <div className="flex justify-center">
-                <button
-                  onClick={stopGeneration}
-                  className="px-4 py-2 rounded-xl glass hover:bg-red-500/20 transition-colors flex items-center gap-2 text-red-400"
-                >
-                  <StopCircle size={16} />
-                  Stop generating
-                </button>
+            {isProcessing && (
+              <div className="flex justify-start">
+                <div className="bg-[#1f2937] rounded-2xl rounded-bl-md px-4 py-2">
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  </div>
+                </div>
               </div>
             )}
             <div ref={messagesEndRef} />
           </div>
 
           {/* Input Area */}
-          <div className="p-4 border-t border-white/10 bg-white/5" ref={inputContainerRef}>
-            <div className="flex items-end gap-3">
+          <div className="p-3 border-t border-white/10 bg-white/5" ref={inputContainerRef}>
+            <div className="flex items-end gap-2">
               <button 
-                className="w-10 h-10 rounded-xl hover:bg-white/10 flex items-center justify-center transition-colors flex-shrink-0" 
+                className="w-9 h-9 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors flex-shrink-0" 
                 title="Attach file"
               >
                 <Paperclip size={20} className="text-[#DDDDDD]" />
@@ -639,10 +645,10 @@ const ConversationSpace = () => {
                   onKeyDown={handleKeyPress}
                   disabled={isProcessing}
                   placeholder={editingId ? "Edit your message..." : "Message YourDaddy Assistant..."}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 pr-12 outline-none focus:ring-2 focus:ring-[#00CEC9] transition-all disabled:opacity-50 resize-none min-h-[52px] max-h-[200px] scrollbar-custom"
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 pr-12 outline-none focus:ring-2 focus:ring-[#00CEC9] transition-all disabled:opacity-50 resize-none min-h-[38px] max-h-[150px] scrollbar-custom"
                   rows={1}
                 />
-                <div className="absolute right-3 bottom-3 text-xs text-white/40">
+                <div className="absolute right-3 bottom-2 text-xs text-white/40">
                   {inputText.length > 0 && `${inputText.length} characters`}
                 </div>
               </div>
@@ -650,7 +656,7 @@ const ConversationSpace = () => {
               <button
                 onClick={handleSend}
                 disabled={isProcessing || !inputText.trim()}
-                className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#00CEC9] to-[#6C5CE7] flex items-center justify-center hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex-shrink-0"
+                className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#00CEC9] to-[#6C5CE7] flex items-center justify-center hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex-shrink-0"
                 title="Send message"
               >
                 {isProcessing ? (
