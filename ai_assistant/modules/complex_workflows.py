@@ -5,7 +5,7 @@ try:
     PYPDF2_AVAILABLE = True
 except ImportError:
     PYPDF2_AVAILABLE = False
-    print("⚠️ PyPDF2 not found. PDF features in workflows will be disabled.")
+    print("WARNING: PyPDF2 not found. PDF features in workflows will be disabled.")
 
 from typing import Optional
 from modules.file_ops import smart_file_search

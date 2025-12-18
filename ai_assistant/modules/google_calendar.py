@@ -25,7 +25,7 @@ try:
     GOOGLE_CALENDAR_AVAILABLE = True
 except ImportError:
     GOOGLE_CALENDAR_AVAILABLE = False
-    print("⚠️ Google Calendar dependencies not found. Calendar features will be disabled.")
+    print("WARNING: Google Calendar dependencies not found. Calendar features will be disabled.")
 
 # Calendar scope for read/write access
 SCOPES = ['https://www.googleapis.com/auth/calendar']

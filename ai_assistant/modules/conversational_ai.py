@@ -88,6 +88,14 @@ class AdvancedConversationalAI:
         self.context_switch_patterns = []
         self.mood_indicators = self._init_mood_indicators()
         
+        # Initialize LLM provider for real-time responses
+        self.llm_provider = None
+        self._init_llm_provider()
+        
+        # Initialize feedback learning system
+        self.feedback_system = None
+        self._init_feedback_system()
+        
         # Initialize database
         self._init_database()
         self._load_contexts()
@@ -96,6 +104,51 @@ class AdvancedConversationalAI:
         self.proactive_thread = None
         self.running = True
         self._start_proactive_monitoring()
+    
+    def _init_llm_provider(self):
+        """Initialize the LLM provider for generating real-time AI responses."""
+        try:
+            # Ensure environment variables are loaded
+            import os
+            try:
+                from dotenv import load_dotenv
+                load_dotenv()
+            except:
+                pass  # dotenv not available, use system env vars
+            
+            from ai_assistant.modules.llm_provider import UnifiedChatInterface, LLMFactory
+            
+            # Prefer Gemini as primary provider (OpenAI quota exceeded)
+            # Try to create a unified chat interface with automatic provider detection
+            self.llm_provider = UnifiedChatInterface(
+                provider='gemini',
+                model='gemini-2.5-flash',
+                use_fallback=True
+            )
+            
+            # Add a system prompt for the assistant
+            self.llm_provider.add_system_message(
+                "You are YourDaddy Assistant, a helpful and friendly AI assistant. "
+                "You can help users with various tasks, answer questions, provide information, "
+                "and have natural conversations. Be concise, helpful, and friendly. "
+                "If the user asks you to perform actions (like opening apps), acknowledge that "
+                "you'll try to help them. For knowledge questions, provide accurate and helpful answers."
+            )
+            print("✅ LLM provider initialized for real-time AI responses")
+        except Exception as e:
+            print(f"⚠️ LLM provider initialization failed: {e}")
+            print("   Falling back to rule-based responses. Set OPENAI_API_KEY or GEMINI_API_KEY for AI responses.")
+            self.llm_provider = None
+    
+    def _init_feedback_system(self):
+        """Initialize feedback learning system for training data collection."""
+        try:
+            from ai_assistant.ai.advanced_feedback_learning import AdaptiveLearningEngine
+            self.feedback_system = AdaptiveLearningEngine()
+            print("✅ Training data feedback loop initialized")
+        except Exception as e:
+            print(f"⚠️ Feedback system initialization failed: {e}")
+            self.feedback_system = None
         
     def _init_database(self):
         """Initialize SQLite database for conversation persistence."""
@@ -351,6 +404,26 @@ class AdvancedConversationalAI:
         context = self.contexts[self.active_context_id]
         return context.messages[-limit:] if context.messages else []
     
+    def save_interaction_feedback(self, prompt: str, response: str, feedback_type: str = "implicit", rating: float = 0.8):
+        """Save interaction to training data with optional feedback."""
+        if self.feedback_system:
+            try:
+                self.feedback_system.log_interaction(
+                    prompt, 
+                    response, 
+                    context={'mood': self.user_mood.value, 'active_context': self.active_context_id}
+                )
+                # Add implicit positive feedback for successful interactions
+                if feedback_type == "implicit" and rating > 0.7:
+                    self.feedback_system.add_feedback(
+                        prompt=prompt,
+                        response=response,
+                        feedback_type="thumbs_up",
+                        feedback_value=1
+                    )
+            except Exception as e:
+                print(f"⚠️ Failed to save training data: {e}")
+    
     def process_message(self, message: str, role: str = "user") -> str:
         """Process a message and generate an intelligent response with REAL execution."""
         try:
@@ -364,6 +437,9 @@ class AdvancedConversationalAI:
             # Check for context switch
             is_switch, switch_msg, new_ctx_id = self.handle_context_switch_request(message)
             if is_switch:
+                # Save to training data
+                if self.feedback_system and role == "user":
+                    self.feedback_system.record_interaction(message, switch_msg, context={'type': 'context_switch'})
                 return switch_msg
             
             # Process different types of queries
@@ -372,15 +448,26 @@ class AdvancedConversationalAI:
             # TRY TO EXECUTE COMMAND FIRST - This is the main change!
             command_result = self._try_execute_command(message, message_lower)
             if command_result:
+                # Save successful command execution to training data
+                if self.feedback_system and role == "user":
+                    self.feedback_system.record_interaction(message, command_result, context={'type': 'command'})
                 return command_result
             
             # Math queries (if not a command)
             if (any(word in message_lower for word in ['calculate', 'times', 'plus', 'minus', 'divided', 'multiply']) and 'what is' in message_lower) or ('pie' in message_lower or 'pi' in message_lower):
-                return self._process_math_query(message)
+                math_result = self._process_math_query(message)
+                # Save to training data
+                if self.feedback_system and role == "user":
+                    self.feedback_system.record_interaction(message, math_result, context={'type': 'math'})
+                return math_result
             
             # Information queries (if not a command)
             if any(word in message_lower for word in ['time', 'date', 'day']) and ('what' in message_lower or 'tell' in message_lower):
-                return self._process_info_query(message)
+                info_result = self._process_info_query(message)
+                # Save to training data
+                if self.feedback_system and role == "user":
+                    self.feedback_system.record_interaction(message, info_result, context={'type': 'info'})
+                return info_result
             
             # If nothing else matched, try as a general command with automation callback
             if self.automation_callback:
@@ -390,8 +477,18 @@ class AdvancedConversationalAI:
                 if any(word in message_lower for word in action_words):
                     return "🤔 I can sense you want me to do something! Could you be more specific? Here are some examples:\n\n📱 'open chrome' - Opens Google Chrome\n🎵 'play music' - Plays music on YouTube\n🔍 'search for python' - Searches Google\n📝 'create a document' - Opens Word\n\nWhat exactly would you like me to do?"
             
-            # Default: Generate contextual response
-            return self._generate_contextual_response(message)
+            # Default: Generate contextual response with LLM
+            response = self._generate_contextual_response(message)
+            
+            # Save all conversational responses to training data
+            if self.feedback_system and role == "user":
+                self.feedback_system.record_interaction(message, response, context={
+                    'type': 'conversation',
+                    'mood': self.user_mood.value,
+                    'context_id': self.active_context_id
+                })
+            
+            return response
             
         except Exception as e:
             import traceback
@@ -923,10 +1020,42 @@ class AdvancedConversationalAI:
         return f"I can help execute that command. You asked: '{query}'"
     
     def _generate_contextual_response(self, message: str) -> str:
-        """Generate a contextual response based on conversation history."""
+        """Generate a contextual response using LLM or fallback to rule-based."""
         message_lower = message.lower().strip()
         
-        # Handle greetings and common conversational inputs
+        # FIRST: Try to use the LLM provider for real-time AI responses
+        if self.llm_provider:
+            try:
+                # Build conversation context for the LLM
+                conversation_context = ""
+                if self.active_context_id and self.active_context_id in self.contexts:
+                    context = self.contexts[self.active_context_id]
+                    # Include recent messages for context
+                    recent_msgs = context.messages[-5:] if context.messages else []
+                    for msg in recent_msgs:
+                        role = msg.get('role', 'user')
+                        content = msg.get('content', '')
+                        if content:
+                            conversation_context += f"{role.capitalize()}: {content}\n"
+                
+                # Generate response using LLM
+                print(f"🤖 Generating AI response for: {message[:50]}...")
+                response = self.llm_provider.chat(message, stream=False)
+                
+                print(f"DEBUG: LLM response type: {type(response)}, length: {len(str(response)) if response else 0}")
+                print(f"DEBUG: Response content: {str(response)[:100]}")
+                
+                if response and "Error" not in str(response) and len(str(response)) > 5:
+                    print(f"✅ AI response generated successfully")
+                    return response
+                else:
+                    print(f"⚠️ LLM returned empty or error response, using fallback")
+                    print(f"   Response was: {response}")
+            except Exception as e:
+                print(f"⚠️ LLM response generation failed: {e}, using rule-based fallback")
+        
+        # FALLBACK: Rule-based responses for common queries (when LLM unavailable)
+        # Handle greetings
         greetings = ['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening']
         if any(greeting in message_lower for greeting in greetings):
             return "👋 Hello! I'm your assistant. I can help you open apps, search the web, play music, create documents, and much more. What would you like me to do?"
@@ -951,22 +1080,34 @@ class AdvancedConversationalAI:
         if any(phrase in message_lower for phrase in ['do something', 'help', 'assist', 'i need']):
             return "I'd be happy to help! 💪 Here are some things I can do for you:\n\n• Open applications: 'open chrome'\n• Search: 'google python tutorial'\n• Play music: 'play believer'\n• Create files: 'create a document'\n• System control: 'volume up'\n\nWhat would you like me to help with?"
         
-        # Handle general conversation
-        thoughtful_responses = [
-            "That's interesting! How can I assist you with that? 🤔",
-            "I see! What would you like me to help you with? 😊",
-            "Got it! Let me know what you need help with. 💡",
-            "Understood! What task can I help you complete? 🎯"
-        ]
-        
         # Return context-aware response for ongoing conversations
         if self.active_context_id:
             context = self.contexts[self.active_context_id]
             if len(context.messages) > 3:
                 return f"I'm following our conversation about {context.topic}. What else can I help you with? 🚀"
         
-        # Random thoughtful response for variety
+        # For general knowledge questions without LLM - indicate limitation
+        question_words = ['what', 'why', 'how', 'when', 'where', 'who', 'which', 'explain', 'tell me about']
+        if any(word in message_lower for word in question_words):
+            return (
+                "🤔 That's a great question! However, I'm currently running in offline mode without access to AI. "
+                "To get intelligent answers to your questions, please configure an API key:\n\n"
+                "• Set OPENAI_API_KEY for GPT models, or\n"
+                "• Set GEMINI_API_KEY for Google Gemini\n\n"
+                "In the meantime, I can still help you with:\n"
+                "• Opening apps: 'open chrome'\n"
+                "• Playing music: 'play [song name]'\n"
+                "• Searching: 'search for [query]'\n"
+                "• Basic calculations: 'what is 10 times 5'"
+            )
+        
+        # Random thoughtful responses for variety
         import random
+        thoughtful_responses = [
+            "That's interesting! I'd love to help you with that. For intelligent responses, please set up an AI API key (OPENAI_API_KEY or GEMINI_API_KEY). 💡",
+            "I hear you! For detailed AI-powered responses, please configure your API keys. Meanwhile, try commands like 'open chrome' or 'play music'! 😊",
+            "Got it! To unlock my full potential, please set OPENAI_API_KEY or GEMINI_API_KEY. I can still help with app control and searches! 🎯"
+        ]
         return random.choice(thoughtful_responses)
     
     def suggest_next_actions(self) -> List[Dict[str, Any]]:

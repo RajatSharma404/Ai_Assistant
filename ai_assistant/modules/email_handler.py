@@ -31,7 +31,7 @@ try:
     GMAIL_AVAILABLE = True
 except ImportError:
     GMAIL_AVAILABLE = False
-    print("⚠️ Gmail dependencies not found. Email features will be disabled.")
+    print("WARNING: Gmail dependencies not found. Email features will be disabled.")
 
 # Gmail API scope for full access
 SCOPES = [

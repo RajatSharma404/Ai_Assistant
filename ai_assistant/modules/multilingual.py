@@ -34,7 +34,7 @@ try:
     GOOGLE_TRANSLATE_AVAILABLE = True
 except ImportError:
     GOOGLE_TRANSLATE_AVAILABLE = False
-    print("⚠️ deep-translator not available. Install with: pip install deep-translator")
+    print("WARNING: deep-translator not available. Install with: pip install deep-translator")
 
 try:
     import speech_recognition as sr
@@ -54,7 +54,7 @@ try:
     EDGE_TTS_AVAILABLE = True
 except ImportError:
     EDGE_TTS_AVAILABLE = False
-    print("⚠️ Edge-TTS not available. Install with: pip install edge-tts")
+    print("WARNING: Edge-TTS not available. Install with: pip install edge-tts")
 
 try:
     from gtts import gTTS
@@ -68,7 +68,7 @@ try:
     VOSK_AVAILABLE = True
 except ImportError:
     VOSK_AVAILABLE = False
-    print("⚠️ Vosk not available. Install with: pip install vosk pyaudio")
+    print("WARNING: Vosk not available. Install with: pip install vosk pyaudio")
 
 class Language(Enum):
     """Supported languages."""

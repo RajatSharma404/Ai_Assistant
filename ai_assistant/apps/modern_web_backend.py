@@ -1370,6 +1370,28 @@ def serve_react_assets(filename):
         print(f"Asset serving error: {e}")
         return "Asset not found", 404
 
+@app.route('/dashboard')
+def dashboard():
+    """Serve the new AI Command Center Dashboard"""
+    from flask import render_template
+    try:
+        print("Serving dashboard.html template")
+        return render_template('dashboard.html')
+    except Exception as e:
+        print(f"Dashboard template error: {e}")
+        return f"<h1>Dashboard Error</h1><p>Error: {e}</p>"
+
+@app.route('/enhanced-chat')
+def enhanced_chat():
+    """Serve enhanced chat interface"""
+    from flask import render_template
+    try:
+        print("Attempting to render enhanced_chat.html")
+        return render_template('enhanced_chat.html')
+    except Exception as e:
+        print(f"Enhanced chat template error: {e}")
+        return f"<h1>Enhanced Chat Template Error</h1><p>Error: {e}</p><p><a href='/'>Go back to main page</a></p>"
+
 @app.route('/<path:path>')
 def serve_static_or_react(path):
     """Serve static files or fallback to React app"""
@@ -1396,26 +1418,6 @@ def serve_static_or_react(path):
     except Exception as e:
         print(f"React app fallback error: {e}")
         return f"<h1>App Error</h1><p>Could not serve React app: {e}</p>", 404
-
-@app.route('/enhanced-chat')
-def enhanced_chat():
-    """Serve enhanced chat interface"""
-    from flask import render_template
-    try:
-        print("Attempting to render enhanced_chat.html")
-        return render_template('enhanced_chat.html')
-    except Exception as e:
-        print(f"Enhanced chat template error: {e}")
-        return f"<h1>Enhanced Chat Template Error</h1><p>Error: {e}</p><p><a href='/'>Go back to main page</a></p>"
-
-@app.route('/dashboard')
-def dashboard():
-    """Serve the new AI Command Center Dashboard"""
-    from flask import render_template
-    try:
-        return render_template('dashboard.html')
-    except Exception as e:
-        return f"<h1>Dashboard Error</h1><p>Error: {e}</p>"
 
 @app.route('/test')
 def test_page():
@@ -1512,6 +1514,21 @@ def api_login():
 @app.route('/api/auth/verify', methods=['GET'])
 @jwt_required()
 def api_verify_token():
+    """Verify if the current token is valid"""
+    current_user = get_jwt_identity()
+    return jsonify({
+        "valid": True,
+        "user": current_user
+    }), 200
+
+@app.route('/api/chat', methods=['POST'])
+@secure_endpoint()
+@limiter.limit("60 per minute")
+def api_enhanced_chat():
+    """Enhanced chat with full AI capabilities"""
+    try:
+        data = request.get_json()
+        current_user = get_jwt_identity() if hasattr(request, 'headers') and 'Authorization' in request.headers else 'anonymous'
         
         # Validate input
         is_valid, error = validate_input(data, 'message', 'command')

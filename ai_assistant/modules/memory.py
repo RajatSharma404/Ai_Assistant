@@ -21,7 +21,7 @@ try:
     ENCRYPTION_AVAILABLE = True
 except ImportError:
     ENCRYPTION_AVAILABLE = False
-    print("⚠️ Encryption not available - sensitive data will not be encrypted")
+    print("WARNING: Encryption not available - sensitive data will not be encrypted")
 
 # Import database configuration
 try:

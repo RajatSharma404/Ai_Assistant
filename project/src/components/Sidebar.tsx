@@ -7,11 +7,19 @@ interface SidebarProps {
   onLogout?: () => void;
 }
 
+interface MenuItem {
+  id: string;
+  icon: any;
+  label: string;
+  isExternal?: boolean;
+  href?: string;
+}
+
 const Sidebar = ({ activeSection, setActiveSection, username, onLogout }: SidebarProps) => {
-  const menuItems = [
+  const menuItems: MenuItem[] = [
     { id: 'command', icon: Home, label: 'Command' },
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { id: 'advanced', icon: Activity, label: 'Adv. Dashboard', href: '/dashboard' },
+    { id: 'advanced', icon: Activity, label: 'Adv. Dashboard', isExternal: true, href: '/dashboard' },
     { id: 'apps', icon: Grid3x3, label: 'Apps' },
     { id: 'voice', icon: Mic, label: 'Voice' },
     { id: 'chat', icon: MessageSquare, label: 'Chat' },
@@ -34,7 +42,13 @@ const Sidebar = ({ activeSection, setActiveSection, username, onLogout }: Sideba
           return (
             <button
               key={item.id}
-              onClick={() => item.href ? window.location.href = item.href : setActiveSection(item.id)}
+              onClick={() => {
+                if (item.isExternal && item.href) {
+                  window.open(item.href, '_blank');
+                } else {
+                  setActiveSection(item.id);
+                }
+              }}
               className={`relative w-14 h-14 rounded-xl flex items-center justify-center transition-all duration-300 group ${
                 isActive
                   ? 'bg-gradient-to-br from-[#00CEC9] to-[#6C5CE7] shadow-lg shadow-[#00CEC9]/50'

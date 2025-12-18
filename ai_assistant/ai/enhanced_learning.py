@@ -628,6 +628,37 @@ class PersonalKnowledgeGraph:
         
         return insights
     
+    def export_graph_data(self) -> Dict[str, Any]:
+        """Export knowledge graph as JSON-serializable data for API/visualization."""
+        if self.graph.number_of_nodes() == 0:
+            return {'nodes': [], 'edges': [], 'stats': {'node_count': 0, 'edge_count': 0}}
+        
+        # Convert to node-link format
+        graph_data = nx.node_link_data(self.graph)
+        
+        # Enhance with statistics
+        stats = {
+            'node_count': self.graph.number_of_nodes(),
+            'edge_count': self.graph.number_of_edges(),
+            'node_types': {},
+            'avg_degree': sum(dict(self.graph.degree()).values()) / self.graph.number_of_nodes() if self.graph.number_of_nodes() > 0 else 0
+        }
+        
+        # Count node types
+        for node in self.graph.nodes():
+            node_type = self.graph.nodes[node].get('type', 'unknown')
+            stats['node_types'][node_type] = stats['node_types'].get(node_type, 0) + 1
+        
+        return {
+            'nodes': graph_data['nodes'],
+            'links': graph_data['links'],
+            'stats': stats
+        }
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get knowledge graph statistics (alias for export_graph_data stats)"""
+        return self.export_graph_data()['stats']
+    
     def visualize_graph(self, output_path: str = "knowledge_graph.png"):
         """Create a visualization of the knowledge graph"""
         if not MATPLOTLIB_AVAILABLE:

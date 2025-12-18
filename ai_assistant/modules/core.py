@@ -9,7 +9,7 @@ try:
     PYWINAUTO_AVAILABLE = True
 except ImportError:
     PYWINAUTO_AVAILABLE = False
-    print("⚠️ pywinauto not found. Window automation features will be disabled.")
+    print("WARNING: pywinauto not found. Window automation features will be disabled.")
 
 import time
 import os 
@@ -31,7 +31,7 @@ try:
     VOLUME_CONTROL_AVAILABLE = True
 except ImportError:
     VOLUME_CONTROL_AVAILABLE = False
-    print("⚠️ pycaw/comtypes not found. Volume control features will be disabled.")
+    print("WARNING: pycaw/comtypes not found. Volume control features will be disabled.")
 
 # --- Imports for PDF Generation ---
 try:
