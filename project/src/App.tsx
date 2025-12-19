@@ -95,25 +95,36 @@ function App() {
     const checkBackendStatus = async () => {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // Increased timeout to 10s
         
         const response = await fetch('/api/status', { 
           signal: controller.signal,
-          headers: authToken ? {
-            'Authorization': `Bearer ${authToken}`,
-          } : {},
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+          },
+          cache: 'no-cache'
         });
         
         clearTimeout(timeoutId);
         
         if (response.ok) {
+          const data = await response.json();
+          console.log('Backend status:', data);
           setBackendStatus('connected');
           setReconnectAttempts(0); // Reset on successful connection
         } else {
+          console.warn('Backend returned non-OK status:', response.status);
           setBackendStatus('disconnected');
         }
-      } catch (error) {
-        console.warn('Backend status check failed:', error);
+      } catch (error: any) {
+        // Only log if it's not an abort error (which is expected on timeout)
+        if (error.name !== 'AbortError') {
+          console.warn('Backend status check failed:', error.message || error);
+        } else {
+          console.warn('Backend status check timed out');
+        }
         setBackendStatus('disconnected');
         
         // Implement exponential backoff

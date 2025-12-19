@@ -33,34 +33,31 @@ class AppDiscovery:
     
     def scan_installed_applications(self) -> Dict[str, str]:
         """
-        Comprehensive scan of all installed applications on the system
+        Scan only officially registered applications:
+        - Windows Registry (Apps & Features in Settings)
+        - Start Menu shortcuts (All Apps in Start Menu)
         """
-        print("🔍 Scanning system for installed applications...")
+        print("🔍 Scanning Windows registered applications...")
         apps = {}
         
-        # Method 1: Windows Registry - Installed Programs
+        # Method 1: Windows Registry - Apps shown in Settings > Apps & Features
+        print("  📋 Scanning Windows Registry (Apps & Features)...")
         apps.update(self._scan_registry_programs())
         
-        # Method 2: Program Files directories
-        apps.update(self._scan_program_files())
-        
-        # Method 3: Windows Store apps
-        apps.update(self._scan_windows_store_apps())
-        
-        # Method 4: Start Menu shortcuts
+        # Method 2: Start Menu shortcuts - All Apps in Start Menu
+        print("  📂 Scanning Start Menu (All Apps)...")
         apps.update(self._scan_start_menu())
         
-        # Method 5: User AppData programs
-        apps.update(self._scan_appdata_programs())
-        
-        # Method 6: Common system utilities
-        apps.update(self._get_system_utilities())
+        # DISABLED: Raw Program Files scanning (finds unregistered apps)
+        # DISABLED: Manual AppData scanning (finds portable apps)
+        # DISABLED: Hardcoded system utilities
+        # DISABLED: PowerShell Store apps scan (already in Start Menu)
         
         # Save to cache
         self.apps_database = apps
         self.save_cache()
         
-        print(f"✅ Discovery complete! Found {len(apps)} applications.")
+        print(f"✅ Discovery complete! Found {len(apps)} registered applications.")
         return apps
     
     def _scan_registry_programs(self) -> Dict[str, str]:
@@ -86,63 +83,14 @@ class AppDiscovery:
                                         # Look for executable files in install location
                                         exe_files = glob.glob(os.path.join(install_location, "*.exe"))
                                         if exe_files:
-                                            # Prefer main executable (usually matches app name)
-                                            main_exe = self._find_main_executable(exe_files, display_name)
-                                            apps[display_name.lower()] = main_exe
+                                            # Select first valid executable
+                                            apps[display_name.lower()] = exe_files[0]
                                 except FileNotFoundError:
                                     continue
                         except OSError:
                             continue
             except Exception as e:
                 print(f"Registry scan error: {e}")
-        
-        return apps
-    
-    def _scan_program_files(self) -> Dict[str, str]:
-        """Scan Program Files directories"""
-        apps = {}
-        program_dirs = [
-            r"C:\Program Files",
-            r"C:\Program Files (x86)"
-        ]
-        
-        for program_dir in program_dirs:
-            if os.path.exists(program_dir):
-                for folder in os.listdir(program_dir):
-                    folder_path = os.path.join(program_dir, folder)
-                    if os.path.isdir(folder_path):
-                        # Look for main executable
-                        exe_files = []
-                        for root, dirs, files in os.walk(folder_path):
-                            for file in files:
-                                if file.endswith('.exe') and not file.startswith('unins'):
-                                    exe_files.append(os.path.join(root, file))
-                        
-                        if exe_files:
-                            main_exe = self._find_main_executable(exe_files, folder)
-                            apps[folder.lower()] = main_exe
-        
-        return apps
-    
-    def _scan_windows_store_apps(self) -> Dict[str, str]:
-        """Scan Windows Store apps using PowerShell"""
-        apps = {}
-        try:
-            # Get Windows Store apps
-            cmd = 'powershell -Command "Get-AppxPackage | Select Name,InstallLocation"'
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-            
-            if result.returncode == 0:
-                lines = result.stdout.strip().split('\n')
-                for line in lines[3:]:  # Skip headers
-                    if line.strip():
-                        parts = line.split()
-                        if len(parts) >= 2:
-                            app_name = parts[0]
-                            # Store apps use a different launch mechanism
-                            apps[app_name.lower()] = f"explorer.exe shell:appsFolder\\{app_name}!"
-        except Exception as e:
-            print(f"Windows Store scan error: {e}")
         
         return apps
     
@@ -162,64 +110,23 @@ class AppDiscovery:
                             shortcut_path = os.path.join(root, file)
                             app_name = file[:-4]  # Remove .lnk extension
                             target = self._resolve_shortcut(shortcut_path)
-                            if target and target.endswith('.exe'):
-                                apps[app_name.lower()] = target
+                            # Accept .exe files OR empty targets (UWP apps use the shortcut itself)
+                            if target and target.lower().endswith('.exe'):
+                                # Check if it's a PWA (browser proxy executables)
+                                pwa_proxies = ['chrome_proxy.exe', 'msedge_proxy.exe', 'brave_proxy.exe', 
+                                              'opera_proxy.exe', 'vivaldi_proxy.exe', 'arc_proxy.exe']
+                                is_pwa = any(proxy in target.lower() for proxy in pwa_proxies)
+                                
+                                if is_pwa:
+                                    # Store the .lnk path for PWAs to preserve app-id arguments
+                                    apps[app_name.lower()] = shortcut_path
+                                else:
+                                    apps[app_name.lower()] = target
+                            elif not target or not target.strip():
+                                # UWP/Store apps - use the shortcut path itself
+                                apps[app_name.lower()] = shortcut_path
         
         return apps
-    
-    def _scan_appdata_programs(self) -> Dict[str, str]:
-        """Scan user AppData for installed programs"""
-        apps = {}
-        appdata_paths = [
-            os.path.expandvars(r"%LOCALAPPDATA%\Programs"),
-            os.path.expandvars(r"%APPDATA%")
-        ]
-        
-        for appdata_path in appdata_paths:
-            if os.path.exists(appdata_path):
-                for item in os.listdir(appdata_path):
-                    item_path = os.path.join(appdata_path, item)
-                    if os.path.isdir(item_path):
-                        exe_files = glob.glob(os.path.join(item_path, "**", "*.exe"), recursive=True)
-                        # Filter out installers and updaters
-                        main_exes = [exe for exe in exe_files if not any(x in exe.lower() 
-                                   for x in ['install', 'setup', 'update', 'unins'])]
-                        if main_exes:
-                            main_exe = self._find_main_executable(main_exes, item)
-                            apps[item.lower()] = main_exe
-        
-        return apps
-    
-    def _get_system_utilities(self) -> Dict[str, str]:
-        """Get common Windows system utilities"""
-        return {
-            'notepad': 'notepad.exe',
-            'calculator': 'calc.exe',
-            'paint': 'mspaint.exe',
-            'wordpad': 'wordpad.exe',
-            'command prompt': 'cmd.exe',
-            'powershell': 'powershell.exe',
-            'task manager': 'taskmgr.exe',
-            'control panel': 'control.exe',
-            'registry editor': 'regedit.exe',
-            'file explorer': 'explorer.exe',
-            'snipping tool': 'SnippingTool.exe',
-            'magnifier': 'magnify.exe'
-        }
-    
-    def _find_main_executable(self, exe_files: List[str], app_name: str) -> str:
-        """Find the main executable from a list of exe files"""
-        if not exe_files:
-            return ""
-        
-        # Prefer executable that matches app name
-        for exe in exe_files:
-            exe_name = os.path.basename(exe).lower()
-            if app_name.lower() in exe_name or exe_name.replace('.exe', '') in app_name.lower():
-                return exe
-        
-        # Prefer shortest path (likely main executable)
-        return min(exe_files, key=len)
     
     def _resolve_shortcut(self, shortcut_path: str) -> str:
         """Resolve .lnk shortcut to actual target with improved methods."""
@@ -305,14 +212,9 @@ class AppDiscovery:
                         self.apps_database = data
                 else:
                     self.apps_database = {}
-                    
-                # Always ensure system utilities are included
-                self.apps_database.update(self._get_system_utilities())
         except Exception as e:
             print(f"Error loading cache: {e}")
             self.apps_database = {}
-            # Ensure system utilities are available even if cache fails
-            self.apps_database.update(self._get_system_utilities())
     
     def _init_usage_database(self):
         """Initialize SQLite database for tracking app usage."""
@@ -462,9 +364,15 @@ class AppDiscovery:
         if not matches:
             return ""
         
-        # Sort by score (highest first) and return best match
+        # Sort by score (highest first)
         matches.sort(reverse=True, key=lambda x: x[0])
-        return matches[0][2]
+        
+        # Only return if the score is good enough (minimum threshold of 30)
+        best_match = matches[0]
+        if best_match[0] >= 30:  # score threshold
+            return best_match[2]
+        else:
+            return ""  # No good match found
     
     def _calculate_match_score(self, query: str, app_name: str, usage_count: int = 0) -> int:
         """Calculate match score for fuzzy search with usage-based ranking."""
@@ -667,6 +575,11 @@ def smart_open_application(app_name: str) -> str:
                 # Windows Store app - use subprocess for security
                 import subprocess
                 subprocess.Popen(app_path, shell=True)
+            elif app_path.lower().endswith('.lnk'):
+                # Shortcut file - launch directly to preserve PWA arguments
+                import subprocess
+                # Use start command to properly handle .lnk files with all their properties
+                subprocess.Popen(['cmd', '/c', 'start', '', app_path], shell=False)
             else:
                 # Regular executable - use os.startfile (safe)
                 os.startfile(app_path)

@@ -113,9 +113,11 @@ const ApplicationGrid = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch('/api/apps');
+      // Call refresh endpoint to rescan system
+      const response = await fetch('/api/apps/refresh', { method: 'POST' });
       if (response.ok) {
-        const data = await response.json();
+        const result = await response.json();
+        const data = result.apps || [];
         // Enhance app data with better categorization
         const enhancedApps = data.map((app: Application) => ({
           ...app,

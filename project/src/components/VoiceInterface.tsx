@@ -23,8 +23,8 @@ const VoiceInterface = () => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [commandHistory, setCommandHistory] = useState<CommandHistoryItem[]>([]);
-  const [showHistory, setShowHistory] = useState(true);
-  const [showSettings, setShowSettings] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [wakeWordEnabled, setWakeWordEnabled] = useState(true);
   const [voiceFeedbackEnabled, setVoiceFeedbackEnabled] = useState(true);
   const [micSensitivity, setMicSensitivity] = useState(75);
@@ -331,7 +331,33 @@ const VoiceInterface = () => {
   const StateIcon = stateInfo.icon;
 
   return (
-    <div className="min-h-screen py-8 animate-fade-in flex flex-col items-center justify-center">
+    <div className="min-h-screen py-8 animate-fade-in flex flex-col items-center justify-center relative">
+      {/* Floating Action Buttons */}
+      <div className="fixed top-8 right-8 z-50 flex gap-3">
+        <button
+          onClick={() => setShowHistory(!showHistory)}
+          className="w-12 h-12 rounded-full bg-gradient-to-br from-[#00CEC9] to-[#6C5CE7] flex items-center justify-center shadow-lg hover:shadow-2xl hover:scale-110 transition-all duration-300 relative"
+          title="Command History"
+        >
+          <MessageSquare size={20} className="text-white" />
+          {commandHistory.length > 0 && (
+            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center text-white font-bold">
+              {commandHistory.length}
+            </span>
+          )}
+        </button>
+        
+        <button
+          onClick={() => setShowSettings(!showSettings)}
+          className="w-12 h-12 rounded-full bg-gradient-to-br from-[#6C5CE7] to-[#00CEC9] flex items-center justify-center shadow-lg hover:shadow-2xl hover:scale-110 transition-all duration-300"
+          title="Voice Settings"
+        >
+          <SettingsIcon size={20} className={`text-white transition-transform duration-300 ${
+            showSettings ? 'rotate-180' : 'rotate-0'
+          }`} />
+        </button>
+      </div>
+
       <div className="text-center mb-12">
         <h1 className="text-4xl font-bold mb-2 text-gradient">Voice Interface</h1>
         <p className="text-[#DDDDDD]">Speak naturally, I'm listening</p>
@@ -472,19 +498,21 @@ const VoiceInterface = () => {
         </div>
       )}
 
-      <div className="max-w-2xl w-full space-y-4">
-        {/* Enhanced Command History */}
-        <div className="glass-strong rounded-2xl overflow-hidden">
-          <div 
-            className="flex items-center justify-between p-6 cursor-pointer hover:bg-white/5 transition-colors"
-            onClick={() => setShowHistory(!showHistory)}
-          >
-            <h2 className="text-xl font-bold">Recent Conversations</h2>
-            {showHistory ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-          </div>
-          
-          {showHistory && (
-            <div className="px-6 pb-6 space-y-4 max-h-96 overflow-y-auto">
+      {/* Enhanced Command History - Modal */}
+      {showHistory && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setShowHistory(false)}>
+          <div className="glass-strong rounded-2xl overflow-hidden max-w-2xl w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b border-white/10 sticky top-0 bg-[#0A0E27]/95 backdrop-blur-sm z-10">
+              <h2 className="text-xl font-bold">Recent Conversations</h2>
+              <button
+                onClick={() => setShowHistory(false)}
+                className="text-[#DDDDDD] hover:text-white transition-colors p-2 hover:bg-white/10 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
               {commandHistory.length === 0 ? (
                 <p className="text-[#DDDDDD] text-center py-8">No commands yet. Start speaking!</p>
               ) : (
@@ -524,21 +552,25 @@ const VoiceInterface = () => {
                 ))
               )}
             </div>
-          )}
-        </div>
-
-        {/* Enhanced Voice Settings */}
-        <div className="glass-strong rounded-2xl overflow-hidden">
-          <div 
-            className="flex items-center justify-between p-6 cursor-pointer hover:bg-white/5 transition-colors"
-            onClick={() => setShowSettings(!showSettings)}
-          >
-            <h2 className="text-xl font-bold">Voice Settings</h2>
-            {showSettings ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
           </div>
-          
-          {showSettings && (
-            <div className="px-6 pb-6 space-y-5">
+        </div>
+      )}
+
+      {/* Enhanced Voice Settings - Modal */}
+      {showSettings && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setShowSettings(false)}>
+          <div className="glass-strong rounded-2xl overflow-hidden max-w-md w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b border-white/10 sticky top-0 bg-[#0A0E27]/95 backdrop-blur-sm z-10">
+              <h2 className="text-xl font-bold">Voice Settings</h2>
+              <button
+                onClick={() => setShowSettings(false)}
+                className="text-[#DDDDDD] hover:text-white transition-colors p-2 hover:bg-white/10 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-5">
               {/* Wake Word Detection */}
               <div className="flex items-center justify-between">
                 <div>
@@ -647,9 +679,9 @@ const VoiceInterface = () => {
                 {isListening ? 'Stop Testing' : 'Test Microphone'}
               </button>
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
