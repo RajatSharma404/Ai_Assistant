@@ -71,6 +71,12 @@ data/
 config/discovered_apps.json
 config/app_usage.db
 config/user_settings.json
+config/multimodal_config.json
+ai_assistant/config/contacts.json
+
+# Config files that may contain secrets
+config/*.env
+!config/*.env.example
 
 # Logs
 logs/
