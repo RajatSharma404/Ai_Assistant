@@ -203,8 +203,13 @@ ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'http://localhost:3000,http://loc
 CORS(app, resources={
     r"/api/*": {
         "origins": ALLOWED_ORIGINS,
-        "methods": ["GET", "POST", "PUT", "DELETE"],
-        "allow_headers": ["Content-Type", "Authorization"],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "Accept"],
+        "supports_credentials": True,
+        "expose_headers": ["Content-Type", "Authorization"]
+    },
+    r"/socket.io/*": {
+        "origins": ALLOWED_ORIGINS,
         "supports_credentials": True
     }
 })
@@ -214,7 +219,10 @@ socketio = SocketIO(
     app, 
     cors_allowed_origins=ALLOWED_ORIGINS,
     async_mode='threading',
-    engineio_logger=False
+    engineio_logger=False,
+    logger=False,
+    ping_timeout=60,
+    ping_interval=25
 )
 
 # User Management (Simple in-memory store - replace with database in production)
@@ -1386,6 +1394,13 @@ def serve_react_assets(filename):
 @app.route('/<path:path>')
 def serve_static_or_react(path):
     """Serve static files or fallback to React app"""
+    # CRITICAL: Skip API routes - let them be handled by their specific handlers
+    if path.startswith('api/'):
+        # This will be handled by Flask's routing system
+        # Return 404 only if no API route matches (Flask will handle this)
+        from flask import abort
+        abort(404)
+    
     # Exclude specific Flask routes that should be handled by their own route handlers
     excluded_paths = ['dashboard', 'enhanced-chat', 'test']
     if path in excluded_paths or path.startswith(('dashboard/', 'enhanced-chat/', 'test/')):
@@ -1606,6 +1621,14 @@ def api_status():
     except:
         pass
     
+    # Check learning systems availability
+    learning_systems_available = False
+    try:
+        from ai_assistant.services.learning_integration import LEARNING_SYSTEMS_AVAILABLE
+        learning_systems_available = LEARNING_SYSTEMS_AVAILABLE
+    except:
+        pass
+    
     return jsonify({
         "status": "online",
         "timestamp": datetime.now().isoformat(),
@@ -1615,15 +1638,321 @@ def api_status():
             "multimodal": MULTIMODAL_AVAILABLE,
             "conversational_ai": CONVERSATIONAL_AI_AVAILABLE,
             "voice": VOICE_AVAILABLE,
-            "system_monitoring": PSUTIL_AVAILABLE
+            "system_monitoring": PSUTIL_AVAILABLE,
+            "learning_systems": learning_systems_available
         }
     })
+
+@app.route('/api/learning/stats')
+@jwt_required(optional=True)
+def api_learning_stats():
+    """Get stats from all learning systems"""
+    try:
+        from ai_assistant.services.learning_integration import get_learning_stats, LEARNING_SYSTEMS_AVAILABLE
+        
+        if not LEARNING_SYSTEMS_AVAILABLE:
+            return jsonify({"error": "Learning systems not available"}), 503
+        
+        stats = get_learning_stats()
+        return jsonify({
+            "success": True,
+            "timestamp": datetime.now().isoformat(),
+            "stats": stats
+        })
+    except Exception as e:
+        logger.error(f"Learning stats error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/dashboard')
+def learning_dashboard():
+    """Serve the learning systems dashboard"""
+    static_dir = Path(__file__).parent.parent.parent / "static"
+    return send_from_directory(static_dir, 'learning_dashboard.html')
+
+# ==================== LEARNING SYSTEMS ENDPOINTS ====================
+# Comprehensive API for all 27 learning systems
+
+@app.route('/api/learning/stats/all')
+@jwt_required(optional=True)
+def api_all_learning_stats():
+    """Get stats from all 27 learning systems"""
+    try:
+        from ai_assistant.services.learning_integration import get_learning_stats, LEARNING_SYSTEMS_AVAILABLE
+        
+        if not LEARNING_SYSTEMS_AVAILABLE:
+            return jsonify({"error": "Learning systems not available"}), 503
+        
+        stats = get_learning_stats()
+        return jsonify({
+            "success": True,
+            "timestamp": datetime.now().isoformat(),
+            "systems": stats,
+            "total_systems": len(stats)
+        })
+    except Exception as e:
+        logger.error(f"All learning stats error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/learning/smart-commands/predict', methods=['POST'])
+@jwt_required(optional=True)
+@limiter.limit("120 per minute")
+def api_smart_command_predict():
+    """Predict next command based on context"""
+    try:
+        from ai_assistant.services.learning_integration import LEARNING_SYSTEMS_AVAILABLE
+        if not LEARNING_SYSTEMS_AVAILABLE:
+            return jsonify({"error": "Learning systems not available"}), 503
+        
+        from ai_assistant.ai.smart_command_prediction import SmartCommandPredictor
+        predictor = SmartCommandPredictor()
+        
+        data = request.get_json()
+        user_id = data.get('user_id', 'default')
+        context = data.get('context', {})
+        recent_commands = data.get('recent_commands', [])
+        recent_outputs = data.get('recent_outputs', [])
+        
+        prediction = predictor.predict_command(user_id, context, recent_commands, recent_outputs)
+        
+        return jsonify({
+            "success": True,
+            "prediction": prediction
+        })
+    except Exception as e:
+        logger.error(f"Smart command prediction error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/learning/context/generate', methods=['POST'])
+@jwt_required(optional=True)
+@limiter.limit("120 per minute")
+def api_context_generate():
+    """Generate context-aware response"""
+    try:
+        from ai_assistant.services.learning_integration import LEARNING_SYSTEMS_AVAILABLE
+        if not LEARNING_SYSTEMS_AVAILABLE:
+            return jsonify({"error": "Learning systems not available"}), 503
+        
+        from ai_assistant.ai.context_aware_response import ContextAwareResponseGenerator
+        generator = ContextAwareResponseGenerator()
+        
+        data = request.get_json()
+        query = data.get('query', '')
+        conversation_history = data.get('conversation_history', [])
+        user_profile = data.get('user_profile', {})
+        
+        response = generator.generate_response(query, conversation_history, user_profile)
+        
+        return jsonify({
+            "success": True,
+            "response": response
+        })
+    except Exception as e:
+        logger.error(f"Context generation error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/learning/workflow/recommend', methods=['POST'])
+@jwt_required(optional=True)
+@limiter.limit("60 per minute")
+def api_workflow_recommend():
+    """Get workflow recommendations"""
+    try:
+        from ai_assistant.services.learning_integration import LEARNING_SYSTEMS_AVAILABLE
+        if not LEARNING_SYSTEMS_AVAILABLE:
+            return jsonify({"error": "Learning systems not available"}), 503
+        
+        from ai_assistant.ai.workflow_recommender import WorkflowRecommender
+        recommender = WorkflowRecommender()
+        
+        data = request.get_json()
+        user_id = data.get('user_id', 'default')
+        current_task = data.get('current_task', '')
+        context = data.get('context', {})
+        
+        recommendations = recommender.recommend_workflows(user_id, current_task, context)
+        
+        return jsonify({
+            "success": True,
+            "recommendations": recommendations
+        })
+    except Exception as e:
+        logger.error(f"Workflow recommendation error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/learning/anomaly/detect', methods=['POST'])
+@jwt_required(optional=True)
+@limiter.limit("120 per minute")
+def api_anomaly_detect():
+    """Detect anomalies in system behavior"""
+    try:
+        from ai_assistant.services.learning_integration import LEARNING_SYSTEMS_AVAILABLE
+        if not LEARNING_SYSTEMS_AVAILABLE:
+            return jsonify({"error": "Learning systems not available"}), 503
+        
+        from ai_assistant.ai.anomaly_detection import AnomalyDetector
+        detector = AnomalyDetector()
+        
+        data = request.get_json()
+        features = data.get('features', [])
+        
+        result = detector.detect(features)
+        
+        return jsonify({
+            "success": True,
+            "is_anomaly": result['is_anomaly'],
+            "anomaly_score": result.get('anomaly_score', 0)
+        })
+    except Exception as e:
+        logger.error(f"Anomaly detection error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/learning/causal/query', methods=['POST'])
+@jwt_required(optional=True)
+@limiter.limit("60 per minute")
+def api_causal_query():
+    """Query causal relationships"""
+    try:
+        from ai_assistant.services.learning_integration import LEARNING_SYSTEMS_AVAILABLE
+        if not LEARNING_SYSTEMS_AVAILABLE:
+            return jsonify({"error": "Learning systems not available"}), 503
+        
+        from ai_assistant.ai.causal_inference import CausalInference
+        causal = CausalInference()
+        
+        data = request.get_json()
+        action = data.get('action', '')
+        target = data.get('target', '')
+        
+        # Add edge if both provided
+        if action and target:
+            causal.add_edge(action, target, strength=data.get('strength', 0.5))
+        
+        stats = causal.get_stats()
+        
+        return jsonify({
+            "success": True,
+            "stats": stats
+        })
+    except Exception as e:
+        logger.error(f"Causal query error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/learning/knowledge-graph/query', methods=['POST'])
+@jwt_required(optional=True)
+@limiter.limit("120 per minute")
+def api_knowledge_graph_query():
+    """Query personal knowledge graph"""
+    try:
+        from ai_assistant.services.learning_integration import LEARNING_SYSTEMS_AVAILABLE
+        if not LEARNING_SYSTEMS_AVAILABLE:
+            return jsonify({"error": "Learning systems not available"}), 503
+        
+        from ai_assistant.ai.enhanced_learning import PersonalKnowledgeGraph
+        kg = PersonalKnowledgeGraph(db_path="data/knowledge_graph.db")
+        
+        data = request.get_json()
+        query_type = data.get('type', 'stats')
+        
+        if query_type == 'stats':
+            result = kg.get_stats()
+        elif query_type == 'export':
+            result = kg.export_graph_data()
+        else:
+            result = {"error": "Unknown query type"}
+        
+        return jsonify({
+            "success": True,
+            "data": result
+        })
+    except Exception as e:
+        logger.error(f"Knowledge graph query error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/learning/adaptive-voice/log', methods=['POST'])
+@jwt_required(optional=True)
+@limiter.limit("200 per minute")
+def api_adaptive_voice_log():
+    """Log voice recognition for adaptation"""
+    try:
+        from ai_assistant.services.learning_integration import LEARNING_SYSTEMS_AVAILABLE
+        if not LEARNING_SYSTEMS_AVAILABLE:
+            return jsonify({"error": "Learning systems not available"}), 503
+        
+        from ai_assistant.ai.adaptive_voice import AdaptiveVoiceRecognition
+        voice = AdaptiveVoiceRecognition()
+        
+        data = request.get_json()
+        user_id = data.get('user_id', 'default')
+        transcription = data.get('transcription', '')
+        intended_text = data.get('intended_text', None)
+        confidence = data.get('confidence', 1.0)
+        
+        voice.log_recognition(user_id, transcription, intended_text, confidence)
+        
+        return jsonify({
+            "success": True,
+            "message": "Recognition logged"
+        })
+    except Exception as e:
+        logger.error(f"Adaptive voice log error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/learning/rl/action', methods=['POST'])
+@jwt_required(optional=True)
+@limiter.limit("120 per minute")
+def api_rl_select_action():
+    """Select action using reinforcement learning"""
+    try:
+        from ai_assistant.services.learning_integration import LEARNING_SYSTEMS_AVAILABLE
+        if not LEARNING_SYSTEMS_AVAILABLE:
+            return jsonify({"error": "Learning systems not available"}), 503
+        
+        from ai_assistant.ai.full_rl_system import PPOAgent
+        agent = PPOAgent(state_dim=10, action_dim=5)
+        
+        data = request.get_json()
+        state = data.get('state', [0] * 10)
+        
+        action = agent.select_action(state)
+        
+        return jsonify({
+            "success": True,
+            "action": int(action),
+            "state": state
+        })
+    except Exception as e:
+        logger.error(f"RL action selection error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/learning/system/<system_name>/stats')
+@jwt_required(optional=True)
+def api_single_system_stats(system_name):
+    """Get stats for a single learning system"""
+    try:
+        from ai_assistant.services.learning_integration import get_learning_stats, LEARNING_SYSTEMS_AVAILABLE
+        
+        if not LEARNING_SYSTEMS_AVAILABLE:
+            return jsonify({"error": "Learning systems not available"}), 503
+        
+        all_stats = get_learning_stats()
+        
+        if system_name not in all_stats:
+            return jsonify({"error": f"System '{system_name}' not found"}), 404
+        
+        return jsonify({
+            "success": True,
+            "system": system_name,
+            "stats": all_stats[system_name]
+        })
+    except Exception as e:
+        logger.error(f"Single system stats error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/chat', methods=['POST'])
 @jwt_required(optional=True)
 @limiter.limit("60 per minute")
 def api_chat():
-    """Enhanced chat endpoint with full AI integration"""
+    """Enhanced chat endpoint with full AI integration and learning"""
+    start_time = time.time()
     try:
         current_user = get_jwt_identity() or "anonymous"
         data = request.get_json()
@@ -1639,6 +1968,17 @@ def api_chat():
         
         if not message and not image_data:
             return jsonify({"error": "No message or image provided"}), 400
+        
+        # Apply learning-enhanced response generation
+        try:
+            from ai_assistant.integrations.learning_integration import get_learning_assistant
+            learning_assistant = get_learning_assistant(current_user)
+            if learning_assistant.systems_active:
+                # Enhance message with context-aware generation
+                message = learning_assistant.generate_intelligent_response(message, context)
+                logger.info("✅ Applied learning-enhanced response generation")
+        except Exception as e:
+            logger.warning(f"Learning enhancement skipped: {e}")
         
         # Process with full AI capabilities
         response = assistant.process_enhanced_chat(message, context, image_data)
@@ -2150,6 +2490,26 @@ def api_apps():
     except Exception as e:
         logger.error(f"Failed to get apps: {e}")
         return jsonify({"error": "Failed to retrieve applications"}), 500
+
+@app.route('/api/apps/refresh', methods=['POST'])
+@limiter.limit("5 per minute")
+def api_refresh_apps():
+    """Refresh/rescan installed applications"""
+    try:
+        if AUTOMATION_AVAILABLE:
+            result = refresh_app_database()
+            apps = get_apps_for_web()
+            return jsonify({
+                "success": True,
+                "message": result,
+                "total": len(apps),
+                "apps": apps
+            })
+        else:
+            return jsonify({"success": False, "message": "App discovery not available"}), 503
+    except Exception as e:
+        logger.error(f"Failed to refresh apps: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/apps/launch', methods=['POST'])
 @jwt_required(optional=True)  # Optional authentication for demo purposes

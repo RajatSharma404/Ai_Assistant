@@ -105,9 +105,21 @@ def start_gui_app():
         return False
 
 def start_cli_app():
-    """Start the command-line interface"""
+    """Start the command-line interface with learning integration"""
     try:
         logger.info("💻 Starting CLI application")
+        
+        # Initialize learning systems
+        learning_active = False
+        learning_assistant = None
+        try:
+            from ai_assistant.integrations.learning_integration import get_learning_assistant
+            learning_assistant = get_learning_assistant()
+            learning_active = learning_assistant.systems_active
+            if learning_active:
+                logger.info("✅ Learning systems active")
+        except ImportError:
+            logger.warning("⚠️ Learning systems not available")
         
         # Simple CLI loop
         try:
@@ -115,19 +127,55 @@ def start_cli_app():
             ai = AdvancedConversationalAI()
             
             print("\n🤖 YourDaddy Assistant CLI")
+            if learning_active:
+                print("🧠 Learning Mode: ACTIVE")
             print("Type 'quit', 'exit', or Ctrl+C to stop\n")
             
+            command_history = []
+            
             while True:
+                # Show command suggestions if available
+                if learning_active and command_history:
+                    try:
+                        suggestions = learning_assistant.get_command_suggestions("", {})
+                        if suggestions:
+                            print(f"💡 Suggestions: {', '.join(suggestions[:3])}")
+                    except:
+                        pass
+                
                 user_input = input("You: ").strip()
                 if user_input.lower() in ['quit', 'exit', 'bye']:
+                    if learning_active:
+                        stats = learning_assistant.get_session_stats()
+                        print(f"\n📊 Session stats: {stats['commands_executed']} commands executed")
                     print("👋 Goodbye!")
                     break
+                
                 if user_input:
+                    start_time = time.time()
+                    
+                    # Generate intelligent response using learning
+                    if learning_active:
+                        user_input = learning_assistant.generate_intelligent_response(user_input)
+                    
                     print("Assistant: ", end="", flush=True)
                     def stream_callback(token):
                         print(token, end="", flush=True)
                     response = ai.generate_model_response(user_input, stream_callback=stream_callback)
                     print("\n")
+                    
+                    # Log interaction for learning
+                    if learning_active:
+                        execution_time = time.time() - start_time
+                        learning_assistant.log_command_execution(
+                            user_input, response, True, execution_time
+                        )
+                        learning_assistant.log_conversation(user_input, response)
+                        command_history.append(user_input)
+                    
+                    # Keep only recent history
+                    if len(command_history) > 10:
+                        command_history.pop(0)
         
         except ImportError:
             # Fallback simple CLI

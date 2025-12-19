@@ -215,7 +215,12 @@
     </div>
     
     <script>
-        const API_BASE = 'http://127.0.0.1:8000/api/learning';
+        // Try Flask backend first (port 5000), fallback to FastAPI (port 8000)
+        const API_ENDPOINTS = [
+            'http://127.0.0.1:5000/api/learning/stats',
+            'http://127.0.0.1:8000/api/learning/stats/all'
+        ];
+        let activeEndpoint = null;
         
         async function loadStats() {
             const loading = document.getElementById('loading');
@@ -229,8 +234,23 @@
             container.style.display = 'none';
             
             try {
-                const response = await fetch(`${API_BASE}/stats/all`);
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                // Try endpoints until one works
+                let response = null;
+                let lastError = null;
+                
+                for (const endpoint of API_ENDPOINTS) {
+                    try {
+                        response = await fetch(endpoint);
+                        if (response.ok) {
+                            activeEndpoint = endpoint;
+                            break;
+                        }
+                    } catch (e) {
+                        lastError = e;
+                    }
+                }
+                
+                if (!response || !response.ok) throw lastError || new Error('All endpoints failed');
                 
                 const data = await response.json();
                 

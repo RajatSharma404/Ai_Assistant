@@ -34,72 +34,49 @@ class AppDiscovery:
         self.apps_cache_file = str(config_dir / "discovered_apps.json")
         self.usage_db_file = str(config_dir / "app_usage.db")
         self.apps_database = {}
+        self._is_refreshing = False
+        self._last_refresh_time = None
+        
+        # Load cache first for fast startup
         self.load_cache()
         self._init_usage_database()
+        
+        # Start background refresh
+        self._start_background_refresh()
     
     def scan_installed_applications(self) -> Dict[str, str]:
         """
-        Comprehensive scan of all installed applications on the system
+        Scan only officially registered applications:
+        - Windows Registry (Apps & Features in Settings)
+        - Start Menu shortcuts (All Apps in Start Menu)
+        - Essential Windows Store apps (Camera, etc.)
         """
-        print("🔍 Scanning system for installed applications...")
+        print("🔍 Scanning Windows registered applications...")
         apps = {}
         
-        system = platform.system().lower()
+        # Method 1: Windows Registry - Installed Programs
+        apps.update(self._scan_registry_programs())
         
-        if system == "windows":
-            # Windows-specific scanning
-            # Method 1: Windows Registry - Installed Programs
-            apps.update(self._scan_registry_programs())
-            
-            # Method 2: Program Files directories
-            apps.update(self._scan_program_files())
-            
-            # Method 3: Windows Store apps
-            apps.update(self._scan_windows_store_apps())
-            
-            # Method 4: Start Menu shortcuts
-            apps.update(self._scan_start_menu())
-            
-            # Method 5: User AppData programs
-            apps.update(self._scan_appdata_programs())
-            
-            # Method 6: Common system utilities
-            apps.update(self._get_system_utilities())
-            
-        elif system == "linux":
-            # Linux-specific scanning
-            # Method 1: Desktop files
-            apps.update(self._scan_linux_desktop_files())
-            
-            # Method 2: Common binary directories
-            apps.update(self._scan_linux_bin_dirs())
-            
-            # Method 3: Snap packages
-            apps.update(self._scan_snap_packages())
-            
-            # Method 4: Flatpak packages
-            apps.update(self._scan_flatpak_packages())
-            
-            # Method 5: Common system utilities
-            apps.update(self._get_linux_system_utilities())
-            
-        elif system == "darwin":  # macOS
-            # macOS-specific scanning
-            apps.update(self._scan_macos_applications())
-            apps.update(self._get_macos_system_utilities())
+        # Method 2: Program Files directories
+        apps.update(self._scan_program_files())
         
-        else:
-            print(f"⚠️  Unsupported operating system: {system}")
-            # Fallback to basic utilities
-            apps.update(self._get_cross_platform_utilities())
+        # Method 3: Windows Store apps
+        apps.update(self._scan_windows_store_apps())
         
-        # Save to cache
+        # Method 4: Start Menu shortcuts
+        apps.update(self._scan_start_menu())
+        
+        # Method 5: User AppData programs
+        apps.update(self._scan_appdata_programs())
+        
+        # Method 6: Common system utilities
+        apps.update(self._get_system_utilities())
         
         # Save to cache
         self.apps_database = apps
         self.save_cache()
         
-        print(f"✅ Discovery complete! Found {len(apps)} applications.")
+        print(f"✅ Discovery complete! Found {len(apps)} registered applications.")
         return apps
     
     def _scan_registry_programs(self) -> Dict[str, str]:
@@ -129,9 +106,8 @@ class AppDiscovery:
                                         # Look for executable files in install location
                                         exe_files = glob.glob(os.path.join(install_location, "*.exe"))
                                         if exe_files:
-                                            # Prefer main executable (usually matches app name)
-                                            main_exe = self._find_main_executable(exe_files, display_name)
-                                            apps[display_name.lower()] = main_exe
+                                            # Select first valid executable
+                                            apps[display_name.lower()] = exe_files[0]
                                 except FileNotFoundError:
                                     continue
                         except OSError:
@@ -141,51 +117,24 @@ class AppDiscovery:
         
         return apps
     
-    def _scan_program_files(self) -> Dict[str, str]:
-        """Scan Program Files directories"""
+    def _scan_essential_store_apps(self) -> Dict[str, str]:
+        """Scan for essential Windows Store apps that users commonly need"""
         apps = {}
-        program_dirs = [
-            r"C:\Program Files",
-            r"C:\Program Files (x86)"
-        ]
+        # List of common Windows Store apps with their protocol handlers
+        essential_apps = {
+            'camera': 'microsoft.windows.camera:',
+            'mail': 'outlookmail:',
+            'calendar': 'outlookcal:',
+            'photos': 'ms-photos:',
+            'calculator': 'calculator:',
+            'maps': 'bingmaps:',
+            'store': 'ms-windows-store:',
+            'settings': 'ms-settings:',
+        }
         
-        for program_dir in program_dirs:
-            if os.path.exists(program_dir):
-                for folder in os.listdir(program_dir):
-                    folder_path = os.path.join(program_dir, folder)
-                    if os.path.isdir(folder_path):
-                        # Look for main executable
-                        exe_files = []
-                        for root, dirs, files in os.walk(folder_path):
-                            for file in files:
-                                if file.endswith('.exe') and not file.startswith('unins'):
-                                    exe_files.append(os.path.join(root, file))
-                        
-                        if exe_files:
-                            main_exe = self._find_main_executable(exe_files, folder)
-                            apps[folder.lower()] = main_exe
-        
-        return apps
-    
-    def _scan_windows_store_apps(self) -> Dict[str, str]:
-        """Scan Windows Store apps using PowerShell"""
-        apps = {}
-        try:
-            # Get Windows Store apps
-            cmd = 'powershell -Command "Get-AppxPackage | Select Name,InstallLocation"'
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-            
-            if result.returncode == 0:
-                lines = result.stdout.strip().split('\n')
-                for line in lines[3:]:  # Skip headers
-                    if line.strip():
-                        parts = line.split()
-                        if len(parts) >= 2:
-                            app_name = parts[0]
-                            # Store apps use a different launch mechanism
-                            apps[app_name.lower()] = f"explorer.exe shell:appsFolder\\{app_name}!"
-        except Exception as e:
-            print(f"Windows Store scan error: {e}")
+        for app_name, protocol in essential_apps.items():
+            # Use the protocol handler as the "path" - Windows will handle it correctly
+            apps[app_name] = protocol
         
         return apps
     
@@ -205,31 +154,21 @@ class AppDiscovery:
                             shortcut_path = os.path.join(root, file)
                             app_name = file[:-4]  # Remove .lnk extension
                             target = self._resolve_shortcut(shortcut_path)
-                            if target and target.endswith('.exe'):
-                                apps[app_name.lower()] = target
-        
-        return apps
-    
-    def _scan_appdata_programs(self) -> Dict[str, str]:
-        """Scan user AppData for installed programs"""
-        apps = {}
-        appdata_paths = [
-            os.path.expandvars(r"%LOCALAPPDATA%\Programs"),
-            os.path.expandvars(r"%APPDATA%")
-        ]
-        
-        for appdata_path in appdata_paths:
-            if os.path.exists(appdata_path):
-                for item in os.listdir(appdata_path):
-                    item_path = os.path.join(appdata_path, item)
-                    if os.path.isdir(item_path):
-                        exe_files = glob.glob(os.path.join(item_path, "**", "*.exe"), recursive=True)
-                        # Filter out installers and updaters
-                        main_exes = [exe for exe in exe_files if not any(x in exe.lower() 
-                                   for x in ['install', 'setup', 'update', 'unins'])]
-                        if main_exes:
-                            main_exe = self._find_main_executable(main_exes, item)
-                            apps[item.lower()] = main_exe
+                            # Accept .exe files OR empty targets (UWP apps use the shortcut itself)
+                            if target and target.lower().endswith('.exe'):
+                                # Check if it's a PWA (browser proxy executables)
+                                pwa_proxies = ['chrome_proxy.exe', 'msedge_proxy.exe', 'brave_proxy.exe', 
+                                              'opera_proxy.exe', 'vivaldi_proxy.exe', 'arc_proxy.exe']
+                                is_pwa = any(proxy in target.lower() for proxy in pwa_proxies)
+                                
+                                if is_pwa:
+                                    # Store the .lnk path for PWAs to preserve app-id arguments
+                                    apps[app_name.lower()] = shortcut_path
+                                else:
+                                    apps[app_name.lower()] = target
+                            elif not target or not target.strip():
+                                # UWP/Store apps - use the shortcut path itself
+                                apps[app_name.lower()] = shortcut_path
         
         return apps
     
@@ -248,189 +187,6 @@ class AppDiscovery:
             'file explorer': 'explorer.exe',
             'snipping tool': 'SnippingTool.exe',
             'magnifier': 'magnify.exe'
-        }
-    
-    def _scan_linux_desktop_files(self) -> Dict[str, str]:
-        """Scan Linux .desktop files for installed applications"""
-        apps = {}
-        desktop_dirs = [
-            "/usr/share/applications",
-            "/usr/local/share/applications",
-            os.path.expanduser("~/.local/share/applications")
-        ]
-        
-        for desktop_dir in desktop_dirs:
-            if os.path.exists(desktop_dir):
-                for file in os.listdir(desktop_dir):
-                    if file.endswith('.desktop'):
-                        desktop_path = os.path.join(desktop_dir, file)
-                        try:
-                            app_info = self._parse_desktop_file(desktop_path)
-                            if app_info:
-                                apps.update(app_info)
-                        except Exception as e:
-                            # Skip problematic desktop files
-                            continue
-        
-        return apps
-    
-    def _parse_desktop_file(self, file_path: str) -> Dict[str, str]:
-        """Parse a .desktop file and extract app information"""
-        apps = {}
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            # Check if it's a valid application
-            if 'Type=Application' not in content:
-                return apps
-            
-            # Extract name and exec
-            name = ""
-            exec_cmd = ""
-            
-            for line in content.split('\n'):
-                line = line.strip()
-                if line.startswith('Name=') and not name:
-                    name = line.split('=', 1)[1]
-                elif line.startswith('Exec=') and not exec_cmd:
-                    exec_cmd = line.split('=', 1)[1]
-            
-            if name and exec_cmd:
-                # Clean up exec command (remove % parameters)
-                exec_cmd = exec_cmd.split()[0]  # Take first part
-                if os.path.exists(exec_cmd) or self._is_command_available(exec_cmd):
-                    apps[name.lower()] = exec_cmd
-                    
-        except Exception:
-            pass
-        
-        return apps
-    
-    def _is_command_available(self, command: str) -> bool:
-        """Check if a command is available in PATH"""
-        try:
-            subprocess.run(['which', command], capture_output=True, check=True)
-            return True
-        except subprocess.CalledProcessError:
-            return False
-    
-    def _scan_linux_bin_dirs(self) -> Dict[str, str]:
-        """Scan common Linux binary directories"""
-        apps = {}
-        bin_dirs = [
-            "/usr/bin",
-            "/usr/local/bin",
-            "/bin",
-            "/opt/bin",
-            os.path.expanduser("~/.local/bin")
-        ]
-        
-        common_apps = [
-            'firefox', 'chromium', 'chrome', 'opera', 'vivaldi',
-            'code', 'vscode', 'sublime_text', 'atom', 'gedit', 'nano', 'vim',
-            'libreoffice', 'soffice', 'thunderbird', 'evolution',
-            'rhythmbox', 'vlc', 'totem', 'mpv', 'smplayer',
-            'gimp', 'inkscape', 'blender', 'krita',
-            'terminal', 'gnome-terminal', 'konsole', 'xfce4-terminal', 'xterm',
-            'nautilus', 'dolphin', 'thunar', 'pcmanfm',
-            'calculator', 'gnome-calculator', 'kcalc', 'galculator'
-        ]
-        
-        for app in common_apps:
-            for bin_dir in bin_dirs:
-                app_path = os.path.join(bin_dir, app)
-                if os.path.exists(app_path) and os.access(app_path, os.X_OK):
-                    apps[app] = app_path
-                    break
-        
-        return apps
-    
-    def _scan_snap_packages(self) -> Dict[str, str]:
-        """Scan for Snap packages"""
-        apps = {}
-        try:
-            result = subprocess.run(['snap', 'list'], capture_output=True, text=True)
-            if result.returncode == 0:
-                lines = result.stdout.strip().split('\n')[1:]  # Skip header
-                for line in lines:
-                    parts = line.split()
-                    if parts:
-                        app_name = parts[0]
-                        # Snap apps are launched with 'snap run app_name'
-                        apps[app_name] = f"snap run {app_name}"
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            pass
-        
-        return apps
-    
-    def _scan_flatpak_packages(self) -> Dict[str, str]:
-        """Scan for Flatpak packages"""
-        apps = {}
-        try:
-            result = subprocess.run(['flatpak', 'list', '--app'], capture_output=True, text=True)
-            if result.returncode == 0:
-                lines = result.stdout.strip().split('\n')
-                for line in lines:
-                    parts = line.split()
-                    if len(parts) >= 2:
-                        app_id = parts[0]
-                        app_name = parts[1] if len(parts) > 1 else app_id
-                        # Flatpak apps are launched with 'flatpak run app_id'
-                        apps[app_name.lower()] = f"flatpak run {app_id}"
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            pass
-        
-        return apps
-    
-    def _get_linux_system_utilities(self) -> Dict[str, str]:
-        """Get common Linux system utilities"""
-        return {
-            'terminal': 'xterm',
-            'file manager': 'nautilus',
-            'text editor': 'gedit',
-            'calculator': 'gnome-calculator',
-            'system monitor': 'gnome-system-monitor',
-            'settings': 'gnome-control-center',
-            'software center': 'gnome-software'
-        }
-    
-    def _scan_macos_applications(self) -> Dict[str, str]:
-        """Scan macOS Applications directory"""
-        apps = {}
-        app_dirs = [
-            "/Applications",
-            "/System/Applications",
-            os.path.expanduser("~/Applications")
-        ]
-        
-        for app_dir in app_dirs:
-            if os.path.exists(app_dir):
-                for item in os.listdir(app_dir):
-                    if item.endswith('.app'):
-                        app_path = os.path.join(app_dir, item)
-                        app_name = item[:-4]  # Remove .app extension
-                        apps[app_name.lower()] = f"open -a '{app_name}'"
-        
-        return apps
-    
-    def _get_macos_system_utilities(self) -> Dict[str, str]:
-        """Get common macOS system utilities"""
-        return {
-            'terminal': 'open -a Terminal',
-            'finder': 'open -a Finder',
-            'textedit': 'open -a TextEdit',
-            'calculator': 'open -a Calculator',
-            'system preferences': 'open -a "System Preferences"',
-            'activity monitor': 'open -a "Activity Monitor"'
-        }
-    
-    def _get_cross_platform_utilities(self) -> Dict[str, str]:
-        """Get basic cross-platform utilities"""
-        return {
-            'python': 'python3',
-            'python3': 'python3',
-            'pip': 'pip3'
         }
     
     def _find_main_executable(self, exe_files: List[str], app_name: str) -> str:
@@ -533,28 +289,12 @@ class AppDiscovery:
                     self.apps_database = {}
                     
                 # Always ensure system utilities are included
-                system = platform.system().lower()
-                if system == "windows":
-                    self.apps_database.update(self._get_system_utilities())
-                elif system == "linux":
-                    self.apps_database.update(self._get_linux_system_utilities())
-                elif system == "darwin":
-                    self.apps_database.update(self._get_macos_system_utilities())
-                else:
-                    self.apps_database.update(self._get_cross_platform_utilities())
+                self.apps_database.update(self._get_system_utilities())
         except Exception as e:
             print(f"Error loading cache: {e}")
             self.apps_database = {}
             # Ensure system utilities are available even if cache fails
-            system = platform.system().lower()
-            if system == "windows":
-                self.apps_database.update(self._get_system_utilities())
-            elif system == "linux":
-                self.apps_database.update(self._get_linux_system_utilities())
-            elif system == "darwin":
-                self.apps_database.update(self._get_macos_system_utilities())
-            else:
-                self.apps_database.update(self._get_cross_platform_utilities())
+            self.apps_database.update(self._get_system_utilities())
     
     def _init_usage_database(self):
         """Initialize SQLite database for tracking app usage."""
@@ -704,9 +444,15 @@ class AppDiscovery:
         if not matches:
             return ""
         
-        # Sort by score (highest first) and return best match
+        # Sort by score (highest first)
         matches.sort(reverse=True, key=lambda x: x[0])
-        return matches[0][2]
+        
+        # Only return if the score is good enough (minimum threshold of 30)
+        best_match = matches[0]
+        if best_match[0] >= 30:  # score threshold
+            return best_match[2]
+        else:
+            return ""  # No good match found
     
     def _calculate_match_score(self, query: str, app_name: str, usage_count: int = 0) -> int:
         """Calculate match score for fuzzy search with usage-based ranking."""
@@ -909,8 +655,8 @@ def smart_open_application(app_name: str) -> str:
                 # Windows Store app - use subprocess for security
                 import subprocess
                 subprocess.Popen(app_path, shell=True)
-            elif platform.system().lower() == "windows":
-                # Regular executable on Windows - use os.startfile (safe)
+            else:
+                # Regular executable - use os.startfile (safe)
                 os.startfile(app_path)
             else:
                 # Linux/macOS - use subprocess
