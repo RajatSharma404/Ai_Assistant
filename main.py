@@ -21,6 +21,13 @@ sys.path.insert(0, str(project_root / "src"))
 
 def main():
     """Main entry point for the AI Assistant."""
+    # Initialize config files from examples if needed
+    try:
+        from setup_config import setup_config_files
+        setup_config_files()
+    except Exception as e:
+        print(f"⚠️  Warning: Could not auto-initialize config files: {e}")
+    
     # Show welcome banner
     print("\n" + "=" * 60)
     print("YourDaddy AI Assistant")
