@@ -28,8 +28,15 @@ class AppDiscovery:
         self.apps_cache_file = str(config_dir / "discovered_apps.json")
         self.usage_db_file = str(config_dir / "app_usage.db")
         self.apps_database = {}
+        self._is_refreshing = False
+        self._last_refresh_time = None
+        
+        # Load cache first for fast startup
         self.load_cache()
         self._init_usage_database()
+        
+        # Start background refresh
+        self._start_background_refresh()
     
     def scan_installed_applications(self) -> Dict[str, str]:
         """
@@ -240,6 +247,31 @@ class AppDiscovery:
         except Exception as e:
             print(f"Error loading cache: {e}")
             self.apps_database = {}
+    
+    def _start_background_refresh(self):
+        """Start background thread to refresh app list"""
+        import threading
+        thread = threading.Thread(target=self._background_refresh, daemon=True)
+        thread.start()
+    
+    def _background_refresh(self):
+        """Background refresh of app database"""
+        try:
+            self._is_refreshing = True
+            print("🔄 Background app refresh started...")
+            
+            # Scan for apps
+            new_apps = self.scan_installed_applications()
+            
+            # Update timestamp
+            from datetime import datetime
+            self._last_refresh_time = datetime.now()
+            
+            print(f"✅ Background refresh complete! Found {len(new_apps)} apps")
+        except Exception as e:
+            print(f"⚠️ Background refresh failed: {e}")
+        finally:
+            self._is_refreshing = False
     
     def _init_usage_database(self):
         """Initialize SQLite database for tracking app usage."""
