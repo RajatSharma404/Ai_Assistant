@@ -67,6 +67,11 @@ user_data/
 offline_cache/
 data/
 
+# User-Specific Configuration (Auto-Generated)
+config/discovered_apps.json
+config/app_usage.db
+config/user_settings.json
+
 # Logs
 logs/
 *.log
