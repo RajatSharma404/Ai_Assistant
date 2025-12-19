@@ -88,23 +88,25 @@ def main():
                 sys.exit(1)
                     
         elif args.interface == "cli":
-            # Try multiple possible locations for CLI
+            # Run CLI interface as subprocess to avoid import issues
+            import subprocess
+            import sys
             try:
-                from ai_assistant.apps.app import main as cli_main
                 print("Starting CLI interface...")
-                cli_main()  # Actually call the CLI main function
-            except ImportError:
-                try:
-                    import app
-                    print("Starting CLI interface...")
-                    if hasattr(app, 'main'):
-                        app.main()
-                    else:
-                        print("❌ CLI main function not found.")
-                        sys.exit(1)
-                except ImportError:
-                    print("❌ CLI interface not found. Please check your installation.")
-                    sys.exit(1)
+                # Run the app.py directly with CLI arguments
+                result = subprocess.run([
+                    sys.executable, 
+                    "ai_assistant/apps/app.py", 
+                    "cli", 
+                    "--skip-auth"
+                ], cwd=project_root)
+                sys.exit(result.returncode)
+            except FileNotFoundError:
+                print("❌ CLI interface not found. Please check your installation.")
+                sys.exit(1)
+            except Exception as e:
+                print(f"❌ Error starting CLI interface: {e}")
+                sys.exit(1)
                     
         elif args.interface == "desktop":
             # Try multiple possible locations for desktop GUI

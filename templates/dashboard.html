@@ -443,12 +443,26 @@
                     </div>
                 </div>
                 <div class="stat-card">
+                    <span class="stat-label">GPU Usage</span>
+                    <span class="stat-value" id="gpu-val">0%</span>
+                    <div style="width: 100%; height: 4px; background: #333; margin-top: auto;">
+                        <div id="gpu-bar" style="width: 0%; height: 100%; background: var(--success);"></div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">GPU Memory</span>
+                    <span class="stat-value" id="gpu-mem-val">0%</span>
+                    <div style="width: 100%; height: 4px; background: #333; margin-top: auto;">
+                        <div id="gpu-mem-bar" style="width: 0%; height: 100%; background: var(--warning);"></div>
+                    </div>
+                </div>
+                <div class="stat-card">
                     <span class="stat-label">Net Down</span>
                     <span class="stat-value" id="net-down">0 Mbps</span>
                 </div>
                 <div class="stat-card">
-                    <span class="stat-label">Net Up</span>
-                    <span class="stat-value" id="net-up">0 Mbps</span>
+                    <span class="stat-label">GPU Temp</span>
+                    <span class="stat-value" id="gpu-temp">N/A</span>
                 </div>
             </div>
 
@@ -458,6 +472,9 @@
                 </div>
                 <div class="task-status" id="current-task">IDLE</div>
                 <div class="task-detail" id="task-detail">Waiting for instructions...</div>
+                <div class="gpu-info" style="margin-top: 10px; font-size: 0.8rem; color: var(--text-dim);">
+                    <i class="fas fa-microchip"></i> <span id="gpu-name">No GPU detected</span>
+                </div>
             </div>
         </div>
 
@@ -610,6 +627,24 @@
             document.getElementById('cpu-val').textContent = Math.round(stats.cpu_usage) + '%';
             document.getElementById('mem-val').textContent = Math.round(stats.memory_usage) + '%';
             document.getElementById('mem-bar').style.width = stats.memory_usage + '%';
+            
+            // GPU stats
+            if (stats.gpu_usage !== undefined) {
+                document.getElementById('gpu-val').textContent = Math.round(stats.gpu_usage) + '%';
+                document.getElementById('gpu-bar').style.width = stats.gpu_usage + '%';
+            }
+            if (stats.gpu_memory_usage !== undefined) {
+                document.getElementById('gpu-mem-val').textContent = Math.round(stats.gpu_memory_usage) + '%';
+                document.getElementById('gpu-mem-bar').style.width = stats.gpu_memory_usage + '%';
+            }
+            if (stats.gpu_temperature !== undefined && stats.gpu_temperature !== 'N/A') {
+                document.getElementById('gpu-temp').textContent = Math.round(stats.gpu_temperature) + '°C';
+            } else {
+                document.getElementById('gpu-temp').textContent = 'N/A';
+            }
+            if (stats.gpu_name && stats.gpu_name !== 'N/A') {
+                document.getElementById('gpu-name').textContent = stats.gpu_name;
+            }
             
             if (stats.network_speed_download) {
                 document.getElementById('net-down').textContent = (stats.network_speed_download / 1024 / 1024).toFixed(1) + ' Mbps';

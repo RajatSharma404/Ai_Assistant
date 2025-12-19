@@ -138,6 +138,17 @@ try:
 except ImportError:
     PSUTIL_AVAILABLE = False
 
+# GPU monitoring
+try:
+    import pynvml
+    pynvml.nvmlInit()
+    PYNVML_AVAILABLE = True
+except ImportError:
+    PYNVML_AVAILABLE = False
+except Exception as e:
+    print(f"âš ï¸ NVIDIA GPU monitoring not available: {e}")
+    PYNVML_AVAILABLE = False
+
 # Voice processing
 try:
     import vosk
@@ -529,7 +540,11 @@ class ModernAssistant:
             "network_speed_download": 0,
             "network_speed_upload": 0,
             "active_tasks": 0,
-            "temperature": "N/A"
+            "temperature": "N/A",
+            "gpu_usage": 0,
+            "gpu_memory_usage": 0,
+            "gpu_temperature": "N/A",
+            "gpu_name": "N/A"
         }
         
         if PSUTIL_AVAILABLE:
@@ -548,6 +563,74 @@ class ModernAssistant:
                 
             except Exception as e:
                 print(f"PSUtil error: {e}")
+        
+        # GPU monitoring
+        if PYNVML_AVAILABLE:
+            try:
+                device_count = pynvml.nvmlDeviceGetCount()
+                if device_count > 0:
+                    # Get primary GPU (index 0)
+                    handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+                    
+                    # GPU utilization
+                    util = pynvml.nvmlDeviceGetUtilizationRates(handle)
+                    gpu_usage = util.gpu
+                    
+                    # GPU memory usage
+                    mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                    gpu_memory_usage = (mem_info.used / mem_info.total) * 100
+                    
+                    # GPU temperature
+                    try:
+                        temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
+                        gpu_temperature = temp
+                    except:
+                        gpu_temperature = "N/A"
+                    
+                    # GPU name
+                    try:
+                        gpu_name = pynvml.nvmlDeviceGetName(handle).decode('utf-8')
+                    except:
+                        gpu_name = "NVIDIA GPU"
+                    
+                    stats.update({
+                        "gpu_usage": gpu_usage,
+                        "gpu_memory_usage": gpu_memory_usage,
+                        "gpu_temperature": gpu_temperature,
+                        "gpu_name": gpu_name
+                    })
+                    
+            except Exception as e:
+                print(f"NVIDIA GPU monitoring error: {e}")
+        
+        # AMD GPU monitoring (fallback)
+        if stats.get("gpu_usage", 0) == 0:  # If NVIDIA didn't work, try AMD
+            try:
+                import subprocess
+                # Try rocm-smi for AMD GPUs
+                result = subprocess.run(['rocm-smi', '--showuse', '--showmeminfo', 'vram', '--showtemp'], 
+                                      capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    lines = result.stdout.strip().split('\n')
+                    for line in lines:
+                        if 'GPU use (%)' in line and 'VRAM use (%)' in line:
+                            # Parse AMD GPU stats
+                            parts = line.split()
+                            if len(parts) >= 4:
+                                gpu_usage = float(parts[2])
+                                gpu_memory_usage = float(parts[3])
+                                gpu_temperature = "N/A"  # AMD temp parsing would need more work
+                                gpu_name = "AMD GPU"
+                                
+                                stats.update({
+                                    "gpu_usage": gpu_usage,
+                                    "gpu_memory_usage": gpu_memory_usage,
+                                    "gpu_temperature": gpu_temperature,
+                                    "gpu_name": gpu_name
+                                })
+                                break
+            except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+                pass  # AMD GPU monitoring not available
         
         self.system_stats_cache = stats
         self.cache_timestamp = current_time
@@ -1303,6 +1386,13 @@ def serve_react_assets(filename):
 @app.route('/<path:path>')
 def serve_static_or_react(path):
     """Serve static files or fallback to React app"""
+    # Exclude specific Flask routes that should be handled by their own route handlers
+    excluded_paths = ['dashboard', 'enhanced-chat', 'test']
+    if path in excluded_paths or path.startswith(('dashboard/', 'enhanced-chat/', 'test/')):
+        # This should not happen if routes are properly defined, but just in case
+        print(f"⚠️ Catch-all route called for excluded path: {path}")
+        return f"<h1>404 Not Found</h1><p>Path '{path}' not found</p>", 404
+    
     # Handle old static files for backward compatibility
     if path.startswith('static/'):
         try:

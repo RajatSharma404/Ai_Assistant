@@ -4,7 +4,13 @@ Basic Windows automation, file operations, and system control functions.
 This module handles the fundamental "hands" operations of the assistant.
 """
 
-from pywinauto.application import Application
+try:
+    from pywinauto.application import Application
+    PYWINAUTO_INSTALLED = True
+except ImportError:
+    PYWINAUTO_INSTALLED = False
+    Application = None
+
 import time
 import os 
 import pyttsx3
@@ -18,9 +24,15 @@ from typing import Optional
 from .app_discovery import smart_open_application, discover_applications, refresh_app_database, list_installed_apps
 
 # --- Imports for Volume Control ---
-from ctypes import cast, POINTER
-from comtypes import CLSCTX_ALL
-from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+try:
+    from ctypes import cast, POINTER
+    from comtypes import CLSCTX_ALL
+    from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+    PYCAW_INSTALLED = True
+except ImportError:
+    PYCAW_INSTALLED = False
+    AudioUtilities = None
+    IAudioEndpointVolume = None
 
 # --- Imports for PDF Generation ---
 try:
@@ -71,6 +83,8 @@ def extract_number(text: str) -> Optional[int]:
 def write_a_note(message: str) -> str:
     """Opens Notepad, types a message, and closes it without saving."""
     print(f"\\n--- 'Hands' (write_a_note) activated. Message: {message} ---")
+    if not PYWINAUTO_INSTALLED:
+        return "Windows automation not available on this platform."
     try:
         app = Application(backend="uia").start("notepad.exe")
         main_window = app.window(title="Untitled - Notepad")
@@ -152,6 +166,8 @@ def search_youtube(query: str) -> str:
 def close_application(app_name: str) -> str:
     """Closes an open application by its window name."""
     print(f"--- 'Hands' (close_application) activated. App: {app_name} ---")
+    if not PYWINAUTO_INSTALLED:
+        return "Windows automation not available on this platform."
     try:
         app = Application(backend="uia").connect(title_re=f".*{app_name}.*", timeout=5)
         app.window(title_re=f".*{app_name}.*").close()
