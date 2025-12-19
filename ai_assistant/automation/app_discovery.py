@@ -36,6 +36,7 @@ class AppDiscovery:
         Scan only officially registered applications:
         - Windows Registry (Apps & Features in Settings)
         - Start Menu shortcuts (All Apps in Start Menu)
+        - Essential Windows Store apps (Camera, etc.)
         """
         print("🔍 Scanning Windows registered applications...")
         apps = {}
@@ -48,10 +49,13 @@ class AppDiscovery:
         print("  📂 Scanning Start Menu (All Apps)...")
         apps.update(self._scan_start_menu())
         
+        # Method 3: Essential Windows Store apps
+        print("  📱 Scanning essential Windows Store apps...")
+        apps.update(self._scan_essential_store_apps())
+        
         # DISABLED: Raw Program Files scanning (finds unregistered apps)
         # DISABLED: Manual AppData scanning (finds portable apps)
         # DISABLED: Hardcoded system utilities
-        # DISABLED: PowerShell Store apps scan (already in Start Menu)
         
         # Save to cache
         self.apps_database = apps
@@ -91,6 +95,27 @@ class AppDiscovery:
                             continue
             except Exception as e:
                 print(f"Registry scan error: {e}")
+        
+        return apps
+    
+    def _scan_essential_store_apps(self) -> Dict[str, str]:
+        """Scan for essential Windows Store apps that users commonly need"""
+        apps = {}
+        # List of common Windows Store apps with their protocol handlers
+        essential_apps = {
+            'camera': 'microsoft.windows.camera:',
+            'mail': 'outlookmail:',
+            'calendar': 'outlookcal:',
+            'photos': 'ms-photos:',
+            'calculator': 'calculator:',
+            'maps': 'bingmaps:',
+            'store': 'ms-windows-store:',
+            'settings': 'ms-settings:',
+        }
+        
+        for app_name, protocol in essential_apps.items():
+            # Use the protocol handler as the "path" - Windows will handle it correctly
+            apps[app_name] = protocol
         
         return apps
     
@@ -575,6 +600,10 @@ def smart_open_application(app_name: str) -> str:
                 # Windows Store app - use subprocess for security
                 import subprocess
                 subprocess.Popen(app_path, shell=True)
+            elif app_path.endswith(':'):
+                # Protocol handler (e.g., microsoft.windows.camera:, ms-photos:)
+                import subprocess
+                subprocess.Popen(['cmd', '/c', 'start', app_path], shell=False)
             elif app_path.lower().endswith('.lnk'):
                 # Shortcut file - launch directly to preserve PWA arguments
                 import subprocess
