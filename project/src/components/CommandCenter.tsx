@@ -157,7 +157,7 @@ const CommandCenter = () => {
             <button
               key={action.label}
               onClick={() => handleQuickAction(action.command)}
-              className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${action.color} flex items-center justify-center hover-lift cursor-pointer shadow-lg transition-transform duration-200 hover:scale-110 action-button-${index}`}
+              className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${action.color} flex items-center justify-center cursor-pointer shadow-lg transition-all duration-200 action-button-${index}`}
               title={action.label}
             >
               <Icon size={28} />

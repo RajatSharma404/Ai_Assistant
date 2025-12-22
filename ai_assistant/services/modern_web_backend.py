@@ -519,6 +519,7 @@ class ModernAssistant:
                 while True:
                     try:
                         stats = self.get_real_time_system_stats()
+                        print(f"[DEBUG] Emitting system stats: GPU: {stats.get('gpu_usage')}% Mem: {stats.get('gpu_memory_usage')}% Temp: {stats.get('gpu_temperature')} Name: {stats.get('gpu_name')}")
                         socketio.emit('system_stats_update', stats)
                         time.sleep(5)  # Update every 5 seconds
                     except Exception as e:

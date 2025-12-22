@@ -9,8 +9,14 @@
   "terminal": "xterm",
   "file manager": "nautilus",
   "text editor": "gedit",
-  "calculator": "gnome-calculator",
+  "calculator": "calculator:",
   "system monitor": "gnome-system-monitor",
-  "settings": "gnome-control-center",
-  "software center": "gnome-software"
+  "settings": "ms-settings:",
+  "software center": "gnome-software",
+  "camera": "microsoft.windows.camera:",
+  "mail": "outlookmail:",
+  "calendar": "outlookcal:",
+  "photos": "ms-photos:",
+  "maps": "bingmaps:",
+  "store": "ms-windows-store:"
 }

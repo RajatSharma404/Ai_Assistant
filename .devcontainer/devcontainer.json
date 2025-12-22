@@ -1,0 +1,41 @@
+{
+  "name": "AI Assistant with Audio Support",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  
+  "runArgs": [
+    "--device=/dev/snd:/dev/snd",
+    "--group-add=audio"
+  ],
+  
+  "mounts": [
+    "source=/run/user/${localEnv:UID}/pulse,target=/run/user/1000/pulse,type=bind,consistency=cached"
+  ],
+  
+  "containerEnv": {
+    "PULSE_SERVER": "unix:/run/user/1000/pulse/native"
+  },
+  
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y espeak espeak-ng portaudio19-dev python3-pyaudio alsa-utils pulseaudio-utils && pip install --upgrade pip && pip install -r requirements.txt",
+  
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python"
+      }
+    }
+  },
+  
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12"
+    }
+  },
+  
+  "forwardPorts": [5000, 8000],
+  
+  "remoteUser": "vscode"
+}

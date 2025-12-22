@@ -74,32 +74,80 @@ body {
 /* Fixed positioning for action buttons around center */
 .action-button-0 {
   position: absolute;
-  transform: translate(-50%, -50%) translate(127px, -127px);
+  left: calc(50% + 127px);
+  top: calc(50% - 127px);
+  margin-left: -32px;
+  margin-top: -32px;
+  transition: transform 0.2s ease;
+}
+
+.action-button-0:hover {
+  transform: scale(1.1);
 }
 
 .action-button-1 {
   position: absolute;
-  transform: translate(-50%, -50%) translate(180px, 0px);
+  left: calc(50% + 180px);
+  top: 50%;
+  margin-left: -32px;
+  margin-top: -32px;
+  transition: transform 0.2s ease;
+}
+
+.action-button-1:hover {
+  transform: scale(1.1);
 }
 
 .action-button-2 {
   position: absolute;
-  transform: translate(-50%, -50%) translate(127px, 127px);
+  left: calc(50% + 127px);
+  top: calc(50% + 127px);
+  margin-left: -32px;
+  margin-top: -32px;
+  transition: transform 0.2s ease;
+}
+
+.action-button-2:hover {
+  transform: scale(1.1);
 }
 
 .action-button-3 {
   position: absolute;
-  transform: translate(-50%, -50%) translate(-127px, 127px);
+  left: calc(50% - 127px);
+  top: calc(50% + 127px);
+  margin-left: -32px;
+  margin-top: -32px;
+  transition: transform 0.2s ease;
+}
+
+.action-button-3:hover {
+  transform: scale(1.1);
 }
 
 .action-button-4 {
   position: absolute;
-  transform: translate(-50%, -50%) translate(-180px, 0px);
+  left: calc(50% - 180px);
+  top: 50%;
+  margin-left: -32px;
+  margin-top: -32px;
+  transition: transform 0.2s ease;
+}
+
+.action-button-4:hover {
+  transform: scale(1.1);
 }
 
 .action-button-5 {
   position: absolute;
-  transform: translate(-50%, -50%) translate(-127px, -127px);
+  left: calc(50% - 127px);
+  top: calc(50% - 127px);
+  margin-left: -32px;
+  margin-top: -32px;
+  transition: transform 0.2s ease;
+}
+
+.action-button-5:hover {
+  transform: scale(1.1);
 }
 
 @keyframes breathe {
@@ -219,13 +267,58 @@ body {
     padding: 1.5rem;
   }
   
-  .action-button-0,
-  .action-button-1,
-  .action-button-2,
-  .action-button-3,
-  .action-button-4,
+  .action-button-0 {
+    left: calc(50% + 108px);
+    top: calc(50% - 108px);
+    transform: scale(0.85);
+  }
+  .action-button-0:hover {
+    transform: scale(0.935);
+  }
+  
+  .action-button-1 {
+    left: calc(50% + 153px);
+    top: 50%;
+    transform: scale(0.85);
+  }
+  .action-button-1:hover {
+    transform: scale(0.935);
+  }
+  
+  .action-button-2 {
+    left: calc(50% + 108px);
+    top: calc(50% + 108px);
+    transform: scale(0.85);
+  }
+  .action-button-2:hover {
+    transform: scale(0.935);
+  }
+  
+  .action-button-3 {
+    left: calc(50% - 108px);
+    top: calc(50% + 108px);
+    transform: scale(0.85);
+  }
+  .action-button-3:hover {
+    transform: scale(0.935);
+  }
+  
+  .action-button-4 {
+    left: calc(50% - 153px);
+    top: 50%;
+    transform: scale(0.85);
+  }
+  .action-button-4:hover {
+    transform: scale(0.935);
+  }
+  
   .action-button-5 {
-    transform: translate(-50%, -50%) scale(0.85);
+    left: calc(50% - 108px);
+    top: calc(50% - 108px);
+    transform: scale(0.85);
+  }
+  .action-button-5:hover {
+    transform: scale(0.935);
   }
 }
 
@@ -238,13 +331,59 @@ body {
     border-radius: 15px;
   }
   
-  /* Stack action buttons vertically on mobile */
-  .action-button-0 { transform: translate(-50%, -50%) translate(0, -100px) scale(0.75); }
-  .action-button-1 { transform: translate(-50%, -50%) translate(80px, -50px) scale(0.75); }
-  .action-button-2 { transform: translate(-50%, -50%) translate(80px, 50px) scale(0.75); }
-  .action-button-3 { transform: translate(-50%, -50%) translate(-80px, 50px) scale(0.75); }
-  .action-button-4 { transform: translate(-50%, -50%) translate(-80px, -50px) scale(0.75); }
-  .action-button-5 { transform: translate(-50%, -50%) translate(0, 100px) scale(0.75); }
+  .action-button-0 { 
+    left: 50%;
+    top: calc(50% - 100px);
+    transform: scale(0.75);
+  }
+  .action-button-0:hover { 
+    transform: scale(0.825);
+  }
+  
+  .action-button-1 { 
+    left: calc(50% + 80px);
+    top: calc(50% - 50px);
+    transform: scale(0.75);
+  }
+  .action-button-1:hover { 
+    transform: scale(0.825);
+  }
+  
+  .action-button-2 { 
+    left: calc(50% + 80px);
+    top: calc(50% + 50px);
+    transform: scale(0.75);
+  }
+  .action-button-2:hover { 
+    transform: scale(0.825);
+  }
+  
+  .action-button-3 { 
+    left: calc(50% - 80px);
+    top: calc(50% + 50px);
+    transform: scale(0.75);
+  }
+  .action-button-3:hover { 
+    transform: scale(0.825);
+  }
+  
+  .action-button-4 { 
+    left: calc(50% - 80px);
+    top: calc(50% - 50px);
+    transform: scale(0.75);
+  }
+  .action-button-4:hover { 
+    transform: scale(0.825);
+  }
+  
+  .action-button-5 { 
+    left: 50%;
+    top: calc(50% + 100px);
+    transform: scale(0.75);
+  }
+  .action-button-5:hover { 
+    transform: scale(0.825);
+  }
 }
 
 @media (max-width: 640px) {
