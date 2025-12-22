@@ -44,9 +44,13 @@ def _execute_open_command(self, query: str, query_lower: str) -> str:
     """Execute open application commands."""
     import webbrowser
     import subprocess
+    import re
     
-    # Extract app name
-    app_name = query_lower.replace('open', '').replace('launch', '').replace('start', '').strip()
+    # Extract app name - preserve compound names like WhatsApp
+    app_name = query_lower
+    app_name = app_name.replace('open ', ' ').replace('launch ', ' ').replace('start ', ' ')
+    app_name = re.sub(r'\bapp\b', '', app_name)  # Remove 'app' only if standalone
+    app_name = app_name.strip()
     
     if not app_name:
         return "Which application would you like me to open?"
@@ -72,6 +76,8 @@ def _execute_open_command(self, query: str, query_lower: str) -> str:
         'discord': 'discord.exe',
         'slack': 'slack.exe',
         'teams': 'teams.exe',
+        'whatsapp': 'https://web.whatsapp.com',
+        'telegram': 'telegram.exe',
     }
     
     # Check for website URLs

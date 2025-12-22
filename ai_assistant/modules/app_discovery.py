@@ -46,38 +46,41 @@ class AppDiscovery:
     
     def scan_installed_applications(self) -> Dict[str, str]:
         """
-        Scan only officially registered applications:
-        - Windows Registry (Apps & Features in Settings)
-        - Start Menu shortcuts (All Apps in Start Menu)
-        - Essential Windows Store apps (Camera, etc.)
+        Scan officially registered applications from all sources
         """
-        print("🔍 Scanning Windows registered applications...")
+        print("🔍 Scanning system applications...")
         apps = {}
         
         system = platform.system().lower()
         
         if system == "windows":
-            # Windows-specific scanning
-            # Method 1: Windows Registry - Installed Programs
+            print("\n📋 Windows App Discovery")
+            print("=" * 50)
+            
+            # Method 1: Windows Registry - Apps & Features from Settings
+            print("\n1️⃣  Programs & Features (Registry)")
             apps.update(self._scan_registry_programs())
             
-            # Method 2: Program Files directories
-            apps.update(self._scan_program_files())
-            
-            # Method 3: Windows Store apps
-            apps.update(self._scan_windows_store_apps())
-            
-            # Method 4: Start Menu shortcuts
+            # Method 2: Start Menu - All Apps
+            print("\n2️⃣  Start Menu (All Apps)")
             apps.update(self._scan_start_menu())
             
-            # Method 5: User AppData programs
-            apps.update(self._scan_appdata_programs())
+            # Method 3: Essential Windows Store apps
+            print("\n3️⃣  Windows Store Apps (Essential)")
+            essential_apps = self._scan_essential_store_apps()
+            print(f"    ✅ Added {len(essential_apps)} essential Store apps")
+            apps.update(essential_apps)
             
-            # Method 6: Common system utilities
-            apps.update(self._get_system_utilities())
+            # Method 4: Common system utilities
+            print("\n4️⃣  System Utilities")
+            system_utils = self._get_system_utilities()
+            print(f"    ✅ Added {len(system_utils)} system utilities")
+            apps.update(system_utils)
             
         elif system == "linux":
-            # Linux-specific scanning
+            print("\n🐧 Linux App Discovery")
+            print("=" * 50)
+            
             # Method 1: Desktop files
             apps.update(self._scan_linux_desktop_files())
             
@@ -94,75 +97,122 @@ class AppDiscovery:
             apps.update(self._get_linux_system_utilities())
             
         elif system == "darwin":  # macOS
+            print("\n🍎 macOS App Discovery")
+            print("=" * 50)
+            
             # macOS-specific scanning
             apps.update(self._scan_macos_applications())
             apps.update(self._get_macos_system_utilities())
         
         else:
             print(f"⚠️  Unsupported operating system: {system}")
-            # Fallback to basic utilities
             apps.update(self._get_cross_platform_utilities())
-        
-        # Save to cache
-        # Method 1: Windows Registry - Apps shown in Settings > Apps & Features
-        print("  📋 Scanning Windows Registry (Apps & Features)...")
-        apps.update(self._scan_registry_programs())
-        
-        # Method 2: Start Menu shortcuts - All Apps in Start Menu
-        print("  📂 Scanning Start Menu (All Apps)...")
-        apps.update(self._scan_start_menu())
-        
-        # Method 3: Essential Windows Store apps
-        print("  📱 Scanning essential Windows Store apps...")
-        apps.update(self._scan_essential_store_apps())
-        
-        # DISABLED: Raw Program Files scanning (finds unregistered apps)
-        # DISABLED: Manual AppData scanning (finds portable apps)
-        # DISABLED: Hardcoded system utilities
         
         # Save to cache
         self.apps_database = apps
         self.save_cache()
         
-        print(f"✅ Discovery complete! Found {len(apps)} registered applications.")
+        print(f"\n{'=' * 50}")
+        print(f"✅ Discovery complete! Found {len(apps)} applications.")
+        print(f"{'=' * 50}\n")
+        
         return apps
     
     def _scan_registry_programs(self) -> Dict[str, str]:
-        """Scan Windows Registry for installed programs"""
+        """Scan Windows Registry for installed programs (Programs & Features)"""
         apps = {}
         
         if not HAS_WINREG:
             return apps  # Skip registry scan on non-Windows systems
-            
-        registry_paths = [
-            r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
-            r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+        
+        print("    🔍 Scanning registry keys...")
+        
+        # Scan both HKEY_LOCAL_MACHINE and HKEY_CURRENT_USER
+        registry_locations = [
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+            (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")
         ]
         
-        for reg_path in registry_paths:
+        total_found = 0
+        for hive, reg_path in registry_locations:
             try:
-                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path) as key:
-                    for i in range(winreg.QueryInfoKey(key)[0]):
+                with winreg.OpenKey(hive, reg_path) as key:
+                    num_subkeys = winreg.QueryInfoKey(key)[0]
+                    for i in range(num_subkeys):
                         try:
                             subkey_name = winreg.EnumKey(key, i)
                             with winreg.OpenKey(key, subkey_name) as subkey:
                                 try:
+                                    # Get DisplayName
                                     display_name = winreg.QueryValueEx(subkey, "DisplayName")[0]
-                                    install_location = winreg.QueryValueEx(subkey, "InstallLocation")[0]
+                                    if not display_name or len(display_name.strip()) == 0:
+                                        continue
                                     
-                                    if display_name and install_location:
-                                        # Look for executable files in install location
-                                        exe_files = glob.glob(os.path.join(install_location, "*.exe"))
-                                        if exe_files:
-                                            # Select first valid executable
-                                            apps[display_name.lower()] = exe_files[0]
-                                except FileNotFoundError:
+                                    # Skip system components and updates
+                                    if any(skip in display_name.lower() for skip in 
+                                          ['update', 'hotfix', 'security update', 'kb', 'redistributable']):
+                                        continue
+                                    
+                                    app_key = display_name.lower().strip()
+                                    
+                                    # Try to get executable path in priority order
+                                    exe_path = None
+                                    
+                                    # Method 1: DisplayIcon (often points to exe)
+                                    try:
+                                        icon_path = winreg.QueryValueEx(subkey, "DisplayIcon")[0]
+                                        if icon_path:
+                                            # Remove quotes and icon index
+                                            icon_path = icon_path.strip('"').split(',')[0]
+                                            if icon_path.lower().endswith('.exe') and os.path.exists(icon_path):
+                                                exe_path = icon_path
+                                    except FileNotFoundError:
+                                        pass
+                                    
+                                    # Method 2: InstallLocation + search for exe
+                                    if not exe_path:
+                                        try:
+                                            install_location = winreg.QueryValueEx(subkey, "InstallLocation")[0]
+                                            if install_location and os.path.exists(install_location):
+                                                # Look for main executable
+                                                exe_files = glob.glob(os.path.join(install_location, "*.exe"))
+                                                if exe_files:
+                                                    exe_path = self._find_main_executable(exe_files, display_name)
+                                        except FileNotFoundError:
+                                            pass
+                                    
+                                    # Method 3: UninstallString (may contain exe path)
+                                    if not exe_path:
+                                        try:
+                                            uninstall_string = winreg.QueryValueEx(subkey, "UninstallString")[0]
+                                            if uninstall_string:
+                                                # Extract potential exe path
+                                                parts = uninstall_string.strip('"').split('"')
+                                                for part in parts:
+                                                    if '.exe' in part.lower() and os.path.exists(part.strip()):
+                                                        # Verify it's the app exe, not uninstaller
+                                                        if 'uninstall' not in part.lower():
+                                                            exe_path = part.strip()
+                                                            break
+                                        except FileNotFoundError:
+                                            pass
+                                    
+                                    if exe_path:
+                                        apps[app_key] = exe_path
+                                        total_found += 1
+                                        
+                                except (FileNotFoundError, OSError):
                                     continue
                         except OSError:
                             continue
+            except FileNotFoundError:
+                # Registry key doesn't exist
+                continue
             except Exception as e:
-                print(f"Registry scan error: {e}")
+                print(f"    ⚠️  Error scanning {reg_path}: {e}")
         
+        print(f"    ✅ Found {total_found} apps from registry")
         return apps
     
     def _scan_essential_store_apps(self) -> Dict[str, str]:
@@ -187,37 +237,84 @@ class AppDiscovery:
         return apps
     
     def _scan_start_menu(self) -> Dict[str, str]:
-        """Scan Start Menu shortcuts"""
+        """Scan Start Menu shortcuts (All Apps)"""
         apps = {}
+        
+        print("    🔍 Scanning Start Menu locations...")
+        
+        # All Start Menu locations
         start_menu_paths = [
-            os.path.expandvars(r"%APPDATA%\Microsoft\Windows\Start Menu\Programs"),
-            os.path.expandvars(r"%PROGRAMDATA%\Microsoft\Windows\Start Menu\Programs")
+            os.path.expandvars(r"%APPDATA%\Microsoft\Windows\Start Menu\Programs"),  # User apps
+            os.path.expandvars(r"%PROGRAMDATA%\Microsoft\Windows\Start Menu\Programs"),  # All users
+            os.path.expandvars(r"%APPDATA%\Microsoft\Windows\Start Menu"),  # Root user
+            os.path.expandvars(r"%PROGRAMDATA%\Microsoft\Windows\Start Menu")  # Root all users
         ]
         
-        for start_path in start_menu_paths:
-            if os.path.exists(start_path):
-                for root, dirs, files in os.walk(start_path):
-                    for file in files:
-                        if file.endswith('.lnk'):
-                            shortcut_path = os.path.join(root, file)
-                            app_name = file[:-4]  # Remove .lnk extension
-                            target = self._resolve_shortcut(shortcut_path)
-                            # Accept .exe files OR empty targets (UWP apps use the shortcut itself)
-                            if target and target.lower().endswith('.exe'):
-                                # Check if it's a PWA (browser proxy executables)
-                                pwa_proxies = ['chrome_proxy.exe', 'msedge_proxy.exe', 'brave_proxy.exe', 
-                                              'opera_proxy.exe', 'vivaldi_proxy.exe', 'arc_proxy.exe']
-                                is_pwa = any(proxy in target.lower() for proxy in pwa_proxies)
-                                
-                                if is_pwa:
-                                    # Store the .lnk path for PWAs to preserve app-id arguments
-                                    apps[app_name.lower()] = shortcut_path
-                                else:
-                                    apps[app_name.lower()] = target
-                            elif not target or not target.strip():
-                                # UWP/Store apps - use the shortcut path itself
-                                apps[app_name.lower()] = shortcut_path
+        total_found = 0
+        processed_shortcuts = set()  # Avoid duplicates
         
+        for start_path in start_menu_paths:
+            if not os.path.exists(start_path):
+                continue
+            
+            # Recursively walk through all folders
+            for root, dirs, files in os.walk(start_path):
+                # Skip uninstall folders
+                if 'uninstall' in root.lower():
+                    continue
+                
+                for file in files:
+                    if not file.endswith('.lnk'):
+                        continue
+                    
+                    shortcut_path = os.path.join(root, file)
+                    
+                    # Skip if already processed
+                    if shortcut_path in processed_shortcuts:
+                        continue
+                    processed_shortcuts.add(shortcut_path)
+                    
+                    # Get app name from filename
+                    app_name = file[:-4]  # Remove .lnk extension
+                    
+                    # Skip uninstall shortcuts
+                    if 'uninstall' in app_name.lower():
+                        continue
+                    
+                    app_key = app_name.lower().strip()
+                    
+                    # Skip if already found (prefer user apps over system apps)
+                    if app_key in apps:
+                        continue
+                    
+                    # Resolve the shortcut target
+                    target = self._resolve_shortcut(shortcut_path)
+                    
+                    if target and os.path.exists(target):
+                        # Valid target found
+                        if target.lower().endswith('.exe'):
+                            # Check if it's a PWA (browser proxy executables)
+                            pwa_proxies = ['chrome_proxy.exe', 'msedge_proxy.exe', 'brave_proxy.exe', 
+                                          'opera_proxy.exe', 'vivaldi_proxy.exe', 'arc_proxy.exe']
+                            is_pwa = any(proxy in target.lower() for proxy in pwa_proxies)
+                            
+                            if is_pwa:
+                                # Store the .lnk path for PWAs to preserve app-id arguments
+                                apps[app_key] = shortcut_path
+                            else:
+                                apps[app_key] = target
+                            total_found += 1
+                        elif target.endswith('.lnk'):
+                            # Nested shortcut, use it
+                            apps[app_key] = target
+                            total_found += 1
+                    else:
+                        # No valid target - likely UWP/Store app
+                        # Use the shortcut path itself - Windows will handle it
+                        apps[app_key] = shortcut_path
+                        total_found += 1
+        
+        print(f"    ✅ Found {total_found} apps from Start Menu")
         return apps
     
     def _get_system_utilities(self) -> Dict[str, str]:

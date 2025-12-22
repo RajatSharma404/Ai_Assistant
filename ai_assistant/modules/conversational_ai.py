@@ -650,10 +650,18 @@ class AdvancedConversationalAI:
 
     def _execute_open_command(self, query: str, query_lower: str) -> str:
         """Execute open application commands."""
-        # Extract app name - remove command words
+        # Extract app name - remove command words (but preserve app names)
         app_name = query_lower
-        for word in ['open', 'launch', 'start', 'run', 'the', 'app', 'application', 'program']:
-            app_name = app_name.replace(word, '')
+        
+        # Remove command words carefully to preserve app names like "whatsapp"
+        for word in ['open ', 'launch ', 'start ', 'run ', ' the ', ' please', ' please ']:
+            app_name = app_name.replace(word, ' ')
+        
+        # Only remove 'app' if it's standalone, not part of a word
+        import re
+        app_name = re.sub(r'\bapp\b', '', app_name)
+        app_name = re.sub(r'\bapplication\b', '', app_name)
+        app_name = re.sub(r'\bprogram\b', '', app_name)
         app_name = app_name.strip()
         
         if not app_name:
@@ -708,6 +716,8 @@ class AdvancedConversationalAI:
             'teams': 'teams.exe',
             'zoom': 'zoom.exe',
             'skype': 'skype.exe',
+            'whatsapp': 'https://web.whatsapp.com',
+            'telegram': 'telegram.exe',
             
             # Media
             'vlc': 'vlc.exe',
@@ -777,10 +787,16 @@ class AdvancedConversationalAI:
     
     def _execute_close_command(self, query: str, query_lower: str) -> str:
         """Execute close application commands."""
-        # Extract app name - remove command words
+        import re
+        
+        # Extract app name - remove command words but preserve app names
         app_name = query_lower
-        for word in ['close', 'stop', 'quit', 'exit', 'kill', 'end', 'terminate', 'the', 'app', 'application']:
-            app_name = app_name.replace(word, '')
+        for word in ['close ', 'stop ', 'quit ', 'exit ', 'kill ', 'end ', 'terminate ', ' the ', ' please']:
+            app_name = app_name.replace(word, ' ')
+        
+        # Only remove 'app' if standalone
+        app_name = re.sub(r'\bapp\b', '', app_name)
+        app_name = re.sub(r'\bapplication\b', '', app_name)
         app_name = app_name.strip()
         
         if not app_name:

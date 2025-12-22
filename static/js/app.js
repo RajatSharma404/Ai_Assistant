@@ -254,7 +254,9 @@ class YourDaddyWebInterface {
         } catch (error) {
             // Check if it's an app launch command
             if (command.toLowerCase().includes('open') || command.toLowerCase().includes('launch')) {
-                const appName = command.replace(/open|launch|start|run/gi, '').trim();
+                // Extract app name while preserving compound names like WhatsApp
+                let appName = command.toLowerCase();
+                appName = appName.replace(/\bopen\b|\blaunch\b|\bstart\b|\brun\b/gi, ' ').trim();
                 await this.launchApp(appName);
             } else {
                 throw error; // Re-throw for fallback handling

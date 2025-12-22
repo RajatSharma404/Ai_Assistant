@@ -26,6 +26,7 @@ const VoiceInterface = () => {
   const [showHistory, setShowHistory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [wakeWordEnabled, setWakeWordEnabled] = useState(true);
+  const [alwaysOnMode, setAlwaysOnMode] = useState(true);
   const [voiceFeedbackEnabled, setVoiceFeedbackEnabled] = useState(true);
   const [micSensitivity, setMicSensitivity] = useState(75);
   const [voiceSpeed, setVoiceSpeed] = useState(1.0);
@@ -73,6 +74,11 @@ const VoiceInterface = () => {
       setIsProcessing(false);
       setVoiceState('speaking');
       
+      // Speak the response if voice feedback enabled
+      if (voiceFeedbackEnabled) {
+        speakText(data.response);
+      }
+      
       // Add to history
       const newItem: CommandHistoryItem = {
         id: Date.now().toString(),
@@ -83,14 +89,55 @@ const VoiceInterface = () => {
       };
       setCommandHistory(prev => [newItem, ...prev.slice(0, 9)]);
       
-      // Return to idle after speaking
+      // Return to wake word listening after speaking
       setTimeout(() => {
-        if (wakeWordEnabled) {
+        if (alwaysOnMode && wakeWordEnabled) {
+          setVoiceState('wake_listening');
+          setTranscript('Listening for "Hey Daddy" or "OK Daddy"...');
+          setResponse('Say "Hey Daddy" to activate');
+          console.log('🔄 Returned to wake word listening mode');
+        } else if (wakeWordEnabled) {
           setVoiceState('wake_listening');
         } else {
           setVoiceState('idle');
         }
-      }, 2000);
+      }, 3000);
+    });
+
+    // Handle enhanced_chat response (for wake word commands)
+    socketInstance.on('enhanced_chat_response', (data) => {
+      if (data.response) {
+        setResponse(data.response);
+        setIsProcessing(false);
+        setVoiceState('speaking');
+        
+        // Speak the response
+        if (voiceFeedbackEnabled) {
+          speakText(data.response);
+        }
+        
+        // Add to history
+        const newItem: CommandHistoryItem = {
+          id: Date.now().toString(),
+          timestamp: Date.now(),
+          userText: transcript,
+          assistantResponse: data.response,
+          confidence: confidence
+        };
+        setCommandHistory(prev => [newItem, ...prev.slice(0, 9)]);
+        
+        // Return to wake word listening after speaking
+        setTimeout(() => {
+          if (alwaysOnMode && wakeWordEnabled) {
+            setVoiceState('wake_listening');
+            setTranscript('Listening for "Hey Daddy" or "OK Daddy"...');
+            setResponse('Say "Hey Daddy" to activate');
+            console.log('🔄 Returned to wake word listening mode');
+          } else {
+            setVoiceState('idle');
+          }
+        }, 3000);
+      }
     });
 
     socketInstance.on('voice_start_response', (data) => {
@@ -116,6 +163,17 @@ const VoiceInterface = () => {
     };
   }, []);
 
+  // Auto-start wake word listening in always-on mode
+  useEffect(() => {
+    if (alwaysOnMode && isConnected && !isListening && socket) {
+      const timer = setTimeout(() => {
+        console.log('🎤 Auto-starting always-on wake word detection...');
+        startWakeWordListening();
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [alwaysOnMode, isConnected, isListening]);
+
   const fetchCommandHistory = async () => {
     try {
       const response = await fetch('/api/voice/history');
@@ -125,6 +183,115 @@ const VoiceInterface = () => {
       }
     } catch (error) {
       console.error('Failed to fetch command history:', error);
+    }
+  };
+
+  const startWakeWordListening = async () => {
+    if (!isConnected || !socket || isListening) return;
+    
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+      
+      // Setup audio analysis
+      audioContextRef.current = new AudioContext();
+      const source = audioContextRef.current.createMediaStreamSource(stream);
+      analyserRef.current = audioContextRef.current.createAnalyser();
+      analyserRef.current.fftSize = 256;
+      source.connect(analyserRef.current);
+
+      mediaRecorder.start();
+      setIsListening(true);
+      setVoiceState('wake_listening');
+      setTranscript('Listening for "Hey Daddy" or "OK Daddy"...');
+      setResponse('Always-on mode: Say "Hey Daddy" to activate');
+      
+      // Start Web Speech API for wake word detection
+      if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+        recognitionRef.current = recognition;
+        
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = selectedLanguage;
+        
+        recognition.onresult = (event: any) => {
+          let transcript = '';
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            transcript += event.results[i][0].transcript;
+          }
+          
+          const lowerTranscript = transcript.toLowerCase();
+          const wakeWords = ['hey daddy', 'ok daddy', 'hey dadi', 'ok dadi', 'daddy'];
+          
+          // Check for wake word
+          if (wakeWords.some(word => lowerTranscript.includes(word))) {
+            console.log('🎯 Wake word detected:', transcript);
+            setVoiceState('command_listening');
+            setTranscript('Wake word detected! Listening for command...');
+            setInterimTranscript('');
+            
+            // Wait for command after wake word
+            setTimeout(() => {
+              if (event.results[event.results.length - 1].isFinal) {
+                // Extract command (remove wake word)
+                let command = transcript;
+                wakeWords.forEach(word => {
+                  command = command.replace(new RegExp(word, 'gi'), '').trim();
+                });
+                
+                if (command.length > 2) {
+                  setTranscript(command);
+                  setVoiceState('processing');
+                  // Send command to backend
+                  if (socket) {
+                    socket.emit('enhanced_chat', { message: command });
+                  }
+                } else {
+                  // No command after wake word, keep listening
+                  setVoiceState('wake_listening');
+                  setTranscript('Listening for "Hey Daddy" or "OK Daddy"...');
+                }
+              }
+            }, 1500);
+          } else if (voiceState === 'command_listening') {
+            // If we're already in command listening mode, capture the command
+            if (event.results[event.results.length - 1].isFinal) {
+              setTranscript(transcript);
+              setVoiceState('processing');
+              if (socket) {
+                socket.emit('enhanced_chat', { message: transcript });
+              }
+            } else {
+              setInterimTranscript(transcript);
+            }
+          }
+        };
+        
+        recognition.onerror = (event: any) => {
+          console.error('Wake word detection error:', event.error);
+        };
+        
+        recognition.onend = () => {
+          if (alwaysOnMode && isListening) {
+            try {
+              recognition.start();
+              console.log('🔄 Wake word detection restarted');
+            } catch (e) {
+              console.log('Recognition restart failed:', e);
+            }
+          }
+        };
+        
+        recognition.start();
+        console.log('🎤 Wake word detection started');
+      }
+    } catch (error) {
+      console.error('Failed to start wake word listening:', error);
+      setTranscript('Microphone access denied or not available');
     }
   };
 
@@ -571,11 +738,36 @@ const VoiceInterface = () => {
             </div>
             
             <div className="p-6 space-y-5">
+              {/* Always-On Mode */}
+              <div className="flex items-center justify-between border border-[#00CEC9]/30 rounded-lg p-3 bg-[#00CEC9]/5">
+                <div>
+                  <span className="text-white font-semibold block">Always-On Mode</span>
+                  <span className="text-xs text-[#DDDDDD]/70">Continuously listen for wake words</span>
+                </div>
+                <div 
+                  className={`w-12 h-6 rounded-full cursor-pointer relative transition-colors ${
+                    alwaysOnMode ? 'bg-gradient-to-r from-[#00CEC9] to-[#6C5CE7]' : 'bg-gray-600'
+                  }`}
+                  onClick={() => {
+                    setAlwaysOnMode(!alwaysOnMode);
+                    if (!alwaysOnMode && !isListening) {
+                      setTimeout(() => startWakeWordListening(), 500);
+                    } else if (alwaysOnMode && isListening) {
+                      toggleListening();
+                    }
+                  }}
+                >
+                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${
+                    alwaysOnMode ? 'right-1' : 'left-1'
+                  }`}></div>
+                </div>
+              </div>
+
               {/* Wake Word Detection */}
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-[#DDDDDD] block">Wake Word Detection</span>
-                  <span className="text-xs text-[#DDDDDD]/70">Activate with "Hey Assistant"</span>
+                  <span className="text-xs text-[#DDDDDD]/70">Activate with "Hey Daddy"</span>
                 </div>
                 <div 
                   className={`w-12 h-6 rounded-full cursor-pointer relative transition-colors ${

@@ -1444,6 +1444,373 @@ def enhanced_chat():
         print(f"Enhanced chat template error: {e}")
         return f"<h1>Enhanced Chat Template Error</h1><p>Error: {e}</p><p><a href='/'>Go back to main page</a></p>"
 
+@app.route('/voice')
+def voice_interface():
+    """Web-based voice interface with continuous wake word detection"""
+    return """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🎤 Always Active Voice - YourDaddy Assistant</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 700px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+        }
+        .wake-words {
+            background: #f0f4ff;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .wake-words strong {
+            display: block;
+            margin-bottom: 8px;
+            color: #667eea;
+        }
+        .wake-words span {
+            display: inline-block;
+            background: white;
+            padding: 5px 12px;
+            border-radius: 15px;
+            margin: 3px;
+            font-size: 0.85em;
+            color: #555;
+        }
+        .status {
+            text-align: center;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        .status.sleeping { background: #e3f2fd; color: #1976d2; }
+        .status.listening { background: #fff3e0; color: #f57c00; animation: pulse 1.5s infinite; }
+        .status.awake { background: #fff9c4; color: #f57f17; }
+        .status.processing { background: #f3e5f5; color: #7b1fa2; }
+        .status.speaking { background: #e8f5e9; color: #388e3c; }
+        .status.error { background: #ffebee; color: #d32f2f; }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        
+        .toggle-button {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 3.5em;
+            cursor: pointer;
+            display: block;
+            margin: 30px auto;
+            transition: all 0.3s;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+        .toggle-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.6);
+        }
+        .toggle-button.active {
+            animation: pulse-active 2s infinite;
+            background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
+        }
+        
+        @keyframes pulse-active {
+            0%, 100% { transform: scale(1); box-shadow: 0 10px 30px rgba(76, 175, 80, 0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 15px 40px rgba(76, 175, 80, 0.6); }
+        }
+        
+        .conversation {
+            background: #f5f5f5;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+            display: none;
+        }
+        .conversation.show { display: block; }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        .message.user {
+            background: #e3f2fd;
+            margin-left: 20px;
+        }
+        .message.assistant {
+            background: #e8f5e9;
+            margin-right: 20px;
+        }
+        .message-label {
+            font-size: 0.75em;
+            color: #666;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+        .message-text {
+            color: #333;
+        }
+        .back-button {
+            display: block;
+            text-align: center;
+            margin-top: 20px;
+            color: #667eea;
+            text-decoration: none;
+            font-size: 0.9em;
+        }
+        .back-button:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Always Active Voice</h1>
+        <p class="subtitle">Say the wake word to activate • Continuous listening mode</p>
+        
+        <div class="wake-words">
+            <strong>Wake Words:</strong>
+            <span>Hey Daddy</span>
+            <span>OK Daddy</span>
+            <span>Hey Assistant</span>
+        </div>
+        
+        <div id="status" class="status sleeping">
+            Click to activate always-on listening
+        </div>
+        
+        <button id="toggleButton" class="toggle-button" onclick="toggleAlwaysOn()">
+            💤
+        </button>
+        
+        <div id="conversation" class="conversation"></div>
+        
+        <a href="/" class="back-button">← Back to Dashboard</a>
+    </div>
+
+    <script>
+        let recognition;
+        let isActive = false;
+        let isAwake = false;
+        const WAKE_WORDS = ['hey daddy', 'ok daddy', 'hey assistant', 'arre daddy'];
+        
+        // Check browser support
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            
+            recognition.continuous = true;  // Continuous listening
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+            recognition.maxAlternatives = 1;
+            
+            recognition.onstart = () => {
+                console.log('Recognition started');
+            };
+            
+            recognition.onresult = (event) => {
+                const resultIndex = event.resultIndex;
+                const transcript = event.results[resultIndex][0].transcript.toLowerCase().trim();
+                const confidence = event.results[resultIndex][0].confidence;
+                
+                console.log('Heard:', transcript, 'Confidence:', confidence);
+                
+                if (!isAwake) {
+                    // Check for wake word
+                    const heardWakeWord = WAKE_WORDS.some(word => transcript.includes(word));
+                    
+                    if (heardWakeWord) {
+                        isAwake = true;
+                        updateStatus('awake', '👋 Wake word detected! Listening for command...');
+                        speak('Yes, I am listening');
+                    }
+                } else {
+                    // Process command
+                    addMessage('user', transcript);
+                    updateStatus('processing', '⏳ Processing your command...');
+                    
+                    // Simple processing (you can enhance this)
+                    processCommand(transcript);
+                    
+                    // Reset to sleeping after response
+                    setTimeout(() => {
+                        isAwake = false;
+                        if (isActive) {
+                            updateStatus('sleeping', '💤 Sleeping... Say wake word to activate');
+                        }
+                    }, 3000);
+                }
+            };
+            
+            recognition.onerror = (event) => {
+                console.error('Recognition error:', event.error);
+                if (event.error === 'no-speech') {
+                    // Ignore no-speech errors in continuous mode
+                    return;
+                }
+                if (isActive && event.error !== 'aborted') {
+                    // Restart if error and still active
+                    setTimeout(() => {
+                        if (isActive) {
+                            recognition.start();
+                        }
+                    }, 1000);
+                }
+            };
+            
+            recognition.onend = () => {
+                console.log('Recognition ended');
+                // Auto-restart if still active
+                if (isActive) {
+                    setTimeout(() => {
+                        try {
+                            recognition.start();
+                        } catch (e) {
+                            console.log('Restart failed:', e);
+                        }
+                    }, 100);
+                }
+            };
+        } else {
+            updateStatus('error', '❌ Speech recognition not supported');
+        }
+        
+        function toggleAlwaysOn() {
+            if (!recognition) {
+                alert('Speech recognition not supported. Use Chrome, Edge, or Safari.');
+                return;
+            }
+            
+            if (isActive) {
+                // Stop listening
+                isActive = false;
+                isAwake = false;
+                recognition.stop();
+                document.getElementById('toggleButton').classList.remove('active');
+                document.getElementById('toggleButton').textContent = '💤';
+                updateStatus('sleeping', 'Click to activate always-on listening');
+            } else {
+                // Start continuous listening
+                isActive = true;
+                recognition.start();
+                document.getElementById('toggleButton').classList.add('active');
+                document.getElementById('toggleButton').textContent = '👂';
+                updateStatus('sleeping', '💤 Sleeping... Say wake word to activate');
+                document.getElementById('conversation').classList.add('show');
+            }
+        }
+        
+        function processCommand(command) {
+            // Simple command processing (enhance with actual AI integration)
+            let response = "I heard you say: " + command;
+            
+            if (command.includes('hello') || command.includes('hi')) {
+                response = "Hello! How can I help you?";
+            } else if (command.includes('time')) {
+                response = "The current time is " + new Date().toLocaleTimeString();
+            } else if (command.includes('date')) {
+                response = "Today is " + new Date().toLocaleDateString();
+            } else if (command.includes('weather')) {
+                response = "I would check the weather for you.";
+            } else if (command.includes('play') || command.includes('music')) {
+                response = "I would play music for you.";
+            } else if (command.includes('open')) {
+                response = "I would open that application for you.";
+            } else {
+                response = "Processing: " + command;
+            }
+            
+            addMessage('assistant', response);
+            speak(response);
+            updateStatus('speaking', '🗣️ Speaking...');
+        }
+        
+        function speak(text) {
+            // Use Web Speech API for text-to-speech
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                utterance.volume = 1.0;
+                speechSynthesis.speak(utterance);
+            }
+        }
+        
+        function addMessage(type, text) {
+            const conversation = document.getElementById('conversation');
+            const message = document.createElement('div');
+            message.className = 'message ' + type;
+            
+            const label = document.createElement('div');
+            label.className = 'message-label';
+            label.textContent = type === 'user' ? 'You' : 'Assistant';
+            
+            const textDiv = document.createElement('div');
+            textDiv.className = 'message-text';
+            textDiv.textContent = text;
+            
+            message.appendChild(label);
+            message.appendChild(textDiv);
+            conversation.appendChild(message);
+            
+            // Scroll to bottom
+            conversation.scrollTop = conversation.scrollHeight;
+        }
+        
+        function updateStatus(type, message) {
+            const statusEl = document.getElementById('status');
+            statusEl.className = 'status ' + type;
+            statusEl.textContent = message;
+        }
+        
+        // Auto-start on page load
+        window.addEventListener('load', () => {
+            // Show quick instructions
+            setTimeout(() => {
+                addMessage('assistant', 'Click the button to activate always-on listening. Then say "Hey Daddy" to wake me up!');
+                document.getElementById('conversation').classList.add('show');
+            }, 500);
+        });
+    </script>
+</body>
+</html>
+"""
+
 @app.route('/test')
 def test_page():
     """Simple test page"""
